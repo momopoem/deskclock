@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Runtime files
+*.log
+*.pid
+*.tmp
+
+# Local state
+state.json
+.config/
+
+# Credentials and environment variables
+.env
+*.env
+switchbot.env
+secrets/
+credentials/
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+

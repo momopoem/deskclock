@@ -1,0 +1,12 @@
+pygame>=2.6
+requests>=2.31
+numpy>=1.26
+opencv-python>=4.8
+holidays>=0.45
+jpholiday>=1.0
+smbus2>=0.4
+androidtvremote2
+# Platform-specific packages (install as needed on Raspberry Pi / system Python)
+# RPi.GPIO
+# gpiod / python3-libgpiod
+# smbus / python3-smbus
