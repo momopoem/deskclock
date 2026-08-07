@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+set -e
+
+APPDIR="$HOME/deskclock"
+LOGDIR="$APPDIR/log"
+PY="$APPDIR/venv/bin/python"
+
+mkdir -p "$LOGDIR"
+
+LOGFILE="$LOGDIR/clock.log"
+
+echo "===== deskclock start $(date) =====" >> "$LOGFILE"
+echo "USER=$USER UID=$(id -u) GID=$(id -g)" >> "$LOGFILE"
+echo "PWD=$(pwd)" >> "$LOGFILE"
+
+# GUI環境
+export DISPLAY=:0
+export WAYLAND_DISPLAY=wayland-0
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+
+echo "DISPLAY=$DISPLAY" >> "$LOGFILE"
+echo "WAYLAND_DISPLAY=$WAYLAND_DISPLAY" >> "$LOGFILE"
+echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$LOGFILE"
+
+echo "PY=$PY" >> "$LOGFILE"
+echo "-------------------------------------------" >> "$LOGFILE"
+
+cd "$APPDIR"
+
+# SDL設定
+export SDL_VIDEODRIVER=wayland
+
+echo "Launching clock.py..." >> "$LOGFILE"
+
+exec "$PY" "$APPDIR/app/clock.py" >> "$LOGFILE" 2>&1
