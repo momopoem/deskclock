@@ -26,20 +26,6 @@ from renderer.theme_engine import get_theme_spec
 
 _FONT_CACHE: dict[tuple[str, int], pygame.font.Font] = {}
 FONT_7SEG_PATH = os.path.expanduser("~/deskclock/fonts/DSEG7Classic-Bold.ttf")
-NIXIE_ONE_PATH = os.path.expanduser("~/deskclock/fonts/NixieOne-Resular.ttf")
-NIXIE_FALLBACK_CANDIDATES = [
-    NIXIE_ONE_PATH,
-    os.path.expanduser("~/deskclock/fonts/NixieOne-Regular.ttf"),
-    os.path.expanduser("~/deskclock/fonts/NixieOne.ttf"),
-]
-CUTIVE_MONO_PATH = os.path.expanduser("~/deskclock/fonts/CutiveMono-Regular.ttf")
-CUTIVE_FALLBACK_CANDIDATES = [
-    CUTIVE_MONO_PATH,
-    "/usr/share/fonts/truetype/paratype/PTM55F.ttf",
-    "/usr/share/fonts/truetype/noto/NotoSansMono-Light.ttf",
-    "/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-]
 JP_FONT_CANDIDATES = [
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf",
@@ -55,22 +41,6 @@ def _pick_jp_font_path(preferred: str | None = None) -> str | None:
         if os.path.exists(p):
             return p
     return None
-
-
-
-
-def _pick_nixie_font_path() -> str | None:
-    for p in NIXIE_FALLBACK_CANDIDATES:
-        if p and os.path.exists(p):
-            return p
-    return None
-
-
-def _pick_cutive_like_font_path() -> str | None:
-    for p in CUTIVE_FALLBACK_CANDIDATES:
-        if p and os.path.exists(p):
-            return p
-    return _pick_jp_font_path()
 
 def _load_font(path: str | None, size: int) -> pygame.font.Font:
     try:
@@ -175,7 +145,7 @@ class RenderCtx:
     calendar_popup: bool = False
     calendar_anim: float = 0.0
     calendar_month_offset: int = 0
-    theme: str = "classic"
+    theme: str = "default"
 
 
 
@@ -631,7 +601,7 @@ class ClockRenderer:
         sw, sh = self.sw, self.sh
         screen = self.screen
 
-        theme_spec = get_theme_spec(getattr(ctx, "theme", "classic"))
+        theme_spec = get_theme_spec(getattr(ctx, "theme", "default"))
         canvas.fill(theme_spec.bg_color)
         color = render_color
 
@@ -642,27 +612,6 @@ class ClockRenderer:
         digit_w = DIGIT_W
         digit_h = DIGIT_H
         value_font_path = FONT_7SEG_PATH
-        if theme_spec.name == "nixie":
-            time_font_path = _pick_nixie_font_path() or _pick_cutive_like_font_path() or info_font_path or _pick_jp_font_path()
-            hm_size = max(8, int(round(font_main_size * 0.88)))
-            sec_size = max(8, int(round(font_7seg_sec.get_height() * 1.20)))
-            ampm_size = max(8, int(round(hm_size * 0.35)))
-            top_font_main = _load_font(time_font_path, hm_size)
-            top_font_sec = _load_font(time_font_path, sec_size)
-            top_font_ampm = _load_font(info_font_path or _pick_jp_font_path(), ampm_size)
-            digit_w = max(1, max(top_font_main.size(str(d))[0] for d in range(10)))
-            digit_h = max(1, top_font_main.get_height())
-            gap_ampm = GAP_AMPM
-        elif not theme_spec.use_7seg_time:
-            time_font_path = info_font_path or _pick_jp_font_path()
-            top_font_main = _load_font(time_font_path, int(font_main_size * theme_spec.time_scale))
-            top_font_sec = _load_font(time_font_path, max(8, int(font_main_size * theme_spec.time_scale * theme_spec.sec_scale)))
-            top_font_ampm = _load_font(info_font_path or _pick_jp_font_path(), max(8, int(top_font_main.get_height() * 0.34 * theme_spec.ampm_scale)))
-            digit_w = max(1, top_font_main.size("0")[0])
-            digit_h = max(1, top_font_main.get_height())
-            gap_ampm = int(digit_w * theme_spec.gap_ampm_ratio)
-        if not theme_spec.use_7seg_info:
-            value_font_path = info_font_path or _pick_jp_font_path()
 
         t_res = self.time_widget.render(
             canvas=canvas,
