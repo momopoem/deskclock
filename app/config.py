@@ -80,7 +80,7 @@ PIR_GPIOCHIP = os.environ.get("SR501_GPIOCHIP", "gpiochip0")
 PIR_LINE = int(os.environ.get("SR501_LINE", "17"))
 
 DISPLAY_PM_ENABLE = True
-DIM_AFTER_SEC = 60
+DIM_AFTER_SEC = 300
 OFF_AFTER_SEC = 300
 OFF_AFTER_DIM_SEC = 60
 LUX_DARK = 3.0
@@ -92,7 +92,7 @@ HDMI_OFF_CMD = ["sudo", "-n", "/usr/local/bin/hdmi_off.sh"]
 HDMI_ON_CMD = ["sudo", "-n", "/usr/local/bin/hdmi_on.sh"]
 
 LIGHT_OFF_TIMEOUT_SEC = 600
-PIR_NO_MOTION_SEC = 60
+PIR_NO_MOTION_SEC = 300
 PIR_DIM_TO = 0.20
 PIR_FADE_SEC = 10.0
 PIR_WAKE_OVERRIDE_SEC = 2.0
