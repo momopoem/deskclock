@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 import time
 
+from renderer.theme_engine import get_theme_spec
+
 
 @dataclass
 class CalendarPopupState:
@@ -134,7 +136,7 @@ class ClockState:
         obj.indoor_mode = ui_state.get("indoor_mode", obj.indoor_mode)
         obj.outdoor_mode = ui_state.get("outdoor_mode", obj.outdoor_mode)
         obj.time_mode_24h = bool(ui_state.get("time_mode_24h", obj.time_mode_24h))
-        obj.theme = str(ui_state.get("theme", obj.theme) or obj.theme)
+        obj.theme = get_theme_spec(ui_state.get("theme", obj.theme)).name
         c = ui_state.get("ui_color", [255, 255, 255])
         if isinstance(c, (list, tuple)) and len(c) == 3:
             try:
