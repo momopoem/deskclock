@@ -15,7 +15,15 @@ def _bh1750_read_lux(bus, addr: int) -> float:
     bus.write_byte(addr, 0x01)  # power on
     bus.write_byte(addr, 0x10)  # continuous H-resolution mode
     time.sleep(0.18)            # typical measurement time
-    data = bus.read_i2c_block_data(addr, 0x00, 2)
+    # BH1750 is not register-based.  read_i2c_block_data() writes its
+    # "command" argument before reading; passing 0x00 therefore sends the
+    # BH1750 POWER_DOWN command and can make every sample read as zero.
+    # Use a raw two-byte I2C read instead.
+    from smbus2 import i2c_msg
+
+    msg = i2c_msg.read(addr, 2)
+    bus.i2c_rdwr(msg)
+    data = list(msg)
     raw = (data[0] << 8) | data[1]
     lux = raw / 1.2
     if lux < 0:
@@ -34,18 +42,13 @@ def fetch_bh1750_loop(shared, stop_event):
     if not BH1750_ENABLE:
         return
 
-    # Try smbus2 first, then smbus
-    SMBusClass = None
+    # Raw I2C reads are required for BH1750 (it has no register address).
     try:
         from smbus2 import SMBus as _SMBus  # type: ignore
         SMBusClass = _SMBus
-    except Exception:
-        try:
-            from smbus import SMBus as _SMBus  # type: ignore
-            SMBusClass = _SMBus
-        except Exception as e:
-            shared["lux_err"] = f"BH1750: SMBus not available: {type(e).__name__}: {e}"
-            return
+    except Exception as e:
+        shared["lux_err"] = f"BH1750: smbus2 not available: {type(e).__name__}: {e}"
+        return
 
     try:
         with SMBusClass(BH1750_I2C_BUS) as bus:
