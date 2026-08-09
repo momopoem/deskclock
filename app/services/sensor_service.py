@@ -14,7 +14,9 @@ def _bh1750_read_lux(bus, addr: int) -> float:
     # Power on + continuous H-Resolution mode (1 lx resolution, typical)
     bus.write_byte(addr, 0x01)  # power on
     bus.write_byte(addr, 0x10)  # continuous H-resolution mode
-    time.sleep(0.18)            # typical measurement time
+    # This module requires a longer conversion time than the BH1750 typical
+    # value.  A one-second wait is reliable on the deployed RB5 hardware.
+    time.sleep(1.0)
     # BH1750 is not register-based.  read_i2c_block_data() writes its
     # "command" argument before reading; passing 0x00 therefore sends the
     # BH1750 POWER_DOWN command and can make every sample read as zero.
