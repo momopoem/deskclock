@@ -758,7 +758,7 @@ def main():
 
                         # Weather icon tap -> cycle theme
                         if _pt_in_rect(pt, state.touch_rects_screen.get("weather")):
-                            state.theme = next_theme_name(getattr(state, "theme", "classic"))
+                            state.theme = next_theme_name(getattr(state, "theme", "default"))
                             state.save_ui_state(save_ui_state)
                             continue
 
@@ -939,7 +939,7 @@ def main():
         state.brightness_target = brightness_target
         desired = br_decision.desired
 
-        theme_spec = get_theme_spec(getattr(state, "theme", "classic"))
+        theme_spec = get_theme_spec(getattr(state, "theme", "default"))
         fg_base = state.base_color if getattr(theme_spec, "use_base_color", False) else theme_spec.fg_color
         render_color = _apply_brightness(fg_base, brightness_cur)
 
