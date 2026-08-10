@@ -53,7 +53,9 @@ def compute_desired_brightness(now_mono: float, shared: dict) -> float:
           * 0..BH1750_DARK_LX (default 0..2 lx): treat as lights-off => dim to BH1750_DIM_TO_LIGHTOFF (20%),
             and if also no motion for 5min => turn OFF (0%).
           * >= BH1750_LIGHT_ON_LX (default >=5 lx): treat as light/day => do not dim by lux; dim only by PIR timer.
-          * >= BH1750_WAKE_LX (default >=10 lx): treat as "wake event" => 100% immediately.
+          * Crossing into >= BH1750_WAKE_LX (default >=10 lx): treat as a
+            "wake event" => 100% immediately. A steady bright reading must not
+            keep resetting the inactivity timer.
       - Fade down is handled outside (PIR_FADE_SEC/BH1750_FADE_SEC ~10s).
     """
     # 0) Immediate wake by recent activity (touch/key/motion/lux wake)
@@ -85,11 +87,17 @@ def compute_desired_brightness(now_mono: float, shared: dict) -> float:
     if lux_ok:
         lx = float(lux)
 
-        # Lux wake (>=10lx): treat as an activity that wakes the screen
-        if lx >= BH1750_WAKE_LX:
+        # Lux wake is edge-triggered. A level-triggered check here would update
+        # activity_mono on every frame while the room light is on, preventing
+        # the PIR no-motion timeout from ever dimming the screen.
+        lux_wake_high = bool(shared.get("_lux_wake_high", False))
+        if lx >= BH1750_WAKE_LX and not lux_wake_high:
             shared["activity_mono"] = now_mono
+            shared["_lux_wake_high"] = True
             shared["_lux_state"] = "light"
             return 1.0
+        if lx <= BH1750_LIGHT_ON_LX:
+            shared["_lux_wake_high"] = False
 
         if lx <= BH1750_DARK_LX:
             lux_state = "dark"
