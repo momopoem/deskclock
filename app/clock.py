@@ -100,6 +100,11 @@ from services.weather_service import (
     weather_code_to_icon,
 )
 from services.brightness_controller import _apply_brightness
+from services.light_controller import (
+    arm_light_off,
+    light_off_due,
+    switchbot_command_succeeded,
+)
 from state import ClockState
 from bootstrap import build_ui_dependencies, build_service_dependencies
 
@@ -348,9 +353,9 @@ class DisplayPowerStateMachine:
 
         return decision
 
-LIGHT_OFF_TIMEOUT_SEC = 600  # 10 minutes: while display OFF and no motion -> light OFF
+LIGHT_OFF_TIMEOUT_SEC = 300  # 3 minutes to dim + 2 minutes -> light OFF
 
-PIR_NO_MOTION_SEC = 5 * 60          # 5 minutes
+PIR_NO_MOTION_SEC = 3 * 60          # 3 minutes
 PIR_DIM_TO = 0.20                   # 20%                   # 30%
 PIR_FADE_SEC = 10.0                 # fade duration (sec)
 PIR_WAKE_OVERRIDE_SEC = 2.0         # motion wakes screen immediately even if lux is low
@@ -460,7 +465,7 @@ LIGHT_PROBE_SEC = 8.0
 HIROSHI_LIGHT_GRACE_SEC = 1800.0  # 30 minutes
 
 # If no motion for this long, turn the light off.
-LIGHT_OFF_TIMEOUT_SEC = 600.0  # 10 minutes
+LIGHT_OFF_TIMEOUT_SEC = 300.0  # 3 minutes to dim + 2 minutes
 
 def switchbot_send_command(session: requests.Session, token: str, secret: str, device_id: str, command: str) -> dict:
     """Send a device command via SwitchBot Cloud API.
@@ -482,7 +487,7 @@ def switchbot_light_on(token: str, secret: str, light_device_id: str) -> dict:
     _log_light_event(f"command=ON device={light_device_id} requested")
     with requests.Session() as s:
         res = switchbot_send_command(s, token, secret, light_device_id, "turnOn")
-    if isinstance(res, dict) and res.get("ok") is False:
+    if not switchbot_command_succeeded(res):
         _log_light_event(f"command=ON device={light_device_id} result=NG error={res.get('error', '')}")
     else:
         _log_light_event(f"command=ON device={light_device_id} result=OK")
@@ -492,7 +497,7 @@ def switchbot_light_off(token: str, secret: str, light_device_id: str) -> dict:
     _log_light_event(f"command=OFF device={light_device_id} requested")
     with requests.Session() as s:
         res = switchbot_send_command(s, token, secret, light_device_id, "turnOff")
-    if isinstance(res, dict) and res.get("ok") is False:
+    if not switchbot_command_succeeded(res):
         _log_light_event(f"command=OFF device={light_device_id} result=NG error={res.get('error', '')}")
     else:
         _log_light_event(f"command=OFF device={light_device_id} result=OK")
@@ -674,7 +679,11 @@ def main():
     state.light.last_cmd_mono = 0.0
     state.light.probe_until_mono = 0.0
     state.light.authorized_user_until_mono = 0.0
-    state.light.deadline_mono = 0.0  # next scheduled light OFF time (monotonic)
+    state.light.deadline_mono = (
+        arm_light_off(time.monotonic(), LIGHT_OFF_TIMEOUT_SEC)
+        if state.light.enabled
+        else 0.0
+    )
     state.light.prev_pir_value = int(state.pir_value or 0)
 
     stop_event = threading.Event()
@@ -869,44 +878,44 @@ def main():
 
             # --- Light control (SwitchBot + face recognition) ---
             # Independent from display PM:
-            # - Any motion => light ON immediately and (re)arm an OFF timer (default 10 minutes).
+            # - Any motion => light ON immediately and (re)arm a fixed 5-minute OFF timer.
             # - If no motion continues and the timer expires => light OFF.
             # - On PIR rising edge (and only when dark / DIM / OFF), we run face recognition once.
-            #   If Hiroshi is recognized, we extend the OFF timer.
+            #   Recognition does not extend the no-motion OFF timer.
             if state.light.enabled:
                 if pir_v == 1:
                     # Turn ON as soon as motion is detected (best-effort)
                     if (not state.light.is_on) and ((now_mono - state.light.last_cmd_mono) >= SWITCHBOT_LIGHT_COOLDOWN_SEC):
                         r = switchbot_light_on(sb_token, sb_secret, sb_light_id)
                         state.light.last_cmd_mono = now_mono
-                        if isinstance(r, dict) and r.get("ok") is not False:
+                        if switchbot_command_succeeded(r):
                             state.light.is_on = True
 
                     # Face recognition only on rising edge in conditions where the room might be too dark.
                     if pir_rise and (is_dark or disp_state in ("DIM", "OFF")):
                         fr = run_face_recognize_once()
                         if isinstance(fr, dict) and fr.get("ok") and fr.get("is_authorized_user") is True:
-                            # Personal grace window (monotonic)
+                            # Retained for recognition state compatibility; it does not extend light-off.
                             state.light.authorized_user_until_mono = now_mono + HIROSHI_LIGHT_GRACE_SEC
 
-                    # (Re)arm OFF deadline. If within Hiroshi grace, keep extending with the longer timeout.
-                    if state.light.authorized_user_until_mono and now_mono < float(state.light.authorized_user_until_mono):
-                        state.light.deadline_mono = now_mono + HIROSHI_LIGHT_GRACE_SEC
-                    else:
-                        state.light.deadline_mono = now_mono + LIGHT_OFF_TIMEOUT_SEC
+                    # Every detection restarts the fixed no-motion deadline.
+                    # Identity recognition must not keep an empty room lit.
+                    state.light.deadline_mono = arm_light_off(now_mono, LIGHT_OFF_TIMEOUT_SEC)
 
                 else:
                     # No motion: if the timer has expired, turn OFF (best-effort)
-                    if state.light.is_on and state.light.deadline_mono and (now_mono >= float(state.light.deadline_mono)):
-                        # If Hiroshi grace is active, do not turn off yet.
-                        if (not state.light.authorized_user_until_mono) or (now_mono >= float(state.light.authorized_user_until_mono)):
-                            if (now_mono - state.light.last_cmd_mono) >= SWITCHBOT_LIGHT_COOLDOWN_SEC:
-                                r = switchbot_light_off(sb_token, sb_secret, sb_light_id)
-                                state.light.last_cmd_mono = now_mono
-                                if isinstance(r, dict) and r.get("ok") is not False:
-                                    state.light.is_on = False
-                                    state.light.deadline_mono = 0.0
-                                    state.light.authorized_user_until_mono = 0.0
+                    if light_off_due(
+                        now_mono=now_mono,
+                        deadline_mono=state.light.deadline_mono,
+                        last_cmd_mono=state.light.last_cmd_mono,
+                        cooldown_sec=SWITCHBOT_LIGHT_COOLDOWN_SEC,
+                    ):
+                        r = switchbot_light_off(sb_token, sb_secret, sb_light_id)
+                        state.light.last_cmd_mono = now_mono
+                        if switchbot_command_succeeded(r):
+                            state.light.is_on = False
+                            state.light.deadline_mono = 0.0
+                            state.light.authorized_user_until_mono = 0.0
 
             # StateMachine: decide next display state and HDMI command (fully compatible)
             decision = dpm.step(
