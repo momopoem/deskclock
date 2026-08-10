@@ -262,60 +262,73 @@ def fetch_sht20_loop(shared, stop_event):
 # -----------------------------------------------------------------------------
 
 def _aht21_read_temp_hum_via_i2c(bus_num: int = AHT21_I2C_BUS, addr: int = AHT21_ADDR):
-    """Read AHT21 temperature/humidity via SMBus.
+    """Read AHT21 temperature/humidity using raw I2C transactions.
 
     Returns:
-      (temp_c: float, hum_pct: int) or (None, None) on error.
+      (temp_c: float, hum_pct: int). Raises on communication errors.
+
+    AHT21 commands and responses are not SMBus register operations. In
+    particular, ``read_i2c_block_data(addr, 0x00, 6)`` writes a command byte
+    before reading, which changes the transaction the sensor receives. Use
+    I2C_RDWR messages so the bytes on the wire match the AHT21 protocol.
     """
-    SMBusClass = None
     try:
         from smbus2 import SMBus as _SMBus  # type: ignore
-        SMBusClass = _SMBus
-    except Exception:
-        try:
-            from smbus import SMBus as _SMBus  # type: ignore
-            SMBusClass = _SMBus
-        except Exception:
-            SMBusClass = None
+        from smbus2 import i2c_msg
+    except Exception as e:
+        raise RuntimeError("AHT21 requires smbus2 raw I2C support") from e
 
-    if SMBusClass is None:
-        return None, None
+    def raw_write(bus, payload):
+        msg = i2c_msg.write(addr, payload)
+        bus.i2c_rdwr(msg)
 
-    try:
-        with SMBusClass(int(bus_num)) as bus:
-            # Init (harmless)
+    def raw_read(bus, length: int):
+        msg = i2c_msg.read(addr, length)
+        bus.i2c_rdwr(msg)
+        return list(msg)
+
+    with _SMBus(int(bus_num)) as bus:
+        # Initialise only if the calibration-enable status bit is clear.
+        with I2C_LOCK:
+            status_data = raw_read(bus, 1)
+        if not status_data:
+            raise OSError("AHT21 returned an empty status response")
+        if (status_data[0] & 0x08) == 0:
             with I2C_LOCK:
-                bus.write_i2c_block_data(addr, 0xBE, [0x08, 0x00])
+                raw_write(bus, [0xBE, 0x08, 0x00])
             time.sleep(0.02)
 
-            # Trigger measurement
+        # Trigger measurement.
+        with I2C_LOCK:
+            raw_write(bus, [0xAC, 0x33, 0x00])
+
+        # Wait for the busy status bit to clear.
+        status = 0x80
+        for _ in range(10):
+            time.sleep(0.02)
             with I2C_LOCK:
-                bus.write_i2c_block_data(addr, 0xAC, [0x33, 0x00])
+                current_status = raw_read(bus, 1)
+            if not current_status:
+                raise OSError("AHT21 returned an empty busy-status response")
+            status = current_status[0]
+            if (status & 0x80) == 0:
+                break
+        else:
+            raise TimeoutError("AHT21 measurement did not complete")
 
-            # Wait complete (status bit7 == 0)
-            st = 0x80
-            for _ in range(10):
-                time.sleep(0.02)
-                with I2C_LOCK:
-                    st = bus.read_byte(addr)
-                if (st & 0x80) == 0:
-                    break
+        with I2C_LOCK:
+            data = raw_read(bus, 6)
 
-            with I2C_LOCK:
-                d = bus.read_i2c_block_data(addr, 0x00, 6)
+    if len(data) != 6:
+        raise OSError(f"AHT21 returned {len(data)} measurement bytes, expected 6")
 
-        if not d or len(d) < 6:
-            return None, None
+    hum_raw = (data[1] << 12) | (data[2] << 4) | (data[3] >> 4)
+    temp_raw = ((data[3] & 0x0F) << 16) | (data[4] << 8) | data[5]
 
-        hum_raw = (d[1] << 12) | (d[2] << 4) | (d[3] >> 4)
-        temp_raw = ((d[3] & 0x0F) << 16) | (d[4] << 8) | d[5]
-
-        rh = hum_raw * 100.0 / 1048576.0
-        tc = temp_raw * 200.0 / 1048576.0 - 50.0
-        hum_i = int(round(max(0.0, min(100.0, rh))))
-        return float(tc), hum_i
-    except Exception:
-        return None, None
+    rh = hum_raw * 100.0 / 1048576.0
+    tc = temp_raw * 200.0 / 1048576.0 - 50.0
+    hum_i = int(round(max(0.0, min(100.0, rh))))
+    return float(tc), hum_i
 
 def fetch_aht21_loop(shared, stop_event):
     """Poll AHT21 in a background thread.
@@ -332,11 +345,10 @@ def fetch_aht21_loop(shared, stop_event):
     while not stop_event.is_set():
         try:
             t, h = _aht21_read_temp_hum_via_i2c(bus_num=AHT21_I2C_BUS, addr=AHT21_ADDR)
-            if t is not None and h is not None:
-                shared["aht21_temp_c"] = float(t)
-                shared["aht21_hum_pct"] = int(h)
-                shared["aht21_ts"] = time.time()
-                shared["aht21_err"] = ""
+            shared["aht21_temp_c"] = float(t)
+            shared["aht21_hum_pct"] = int(h)
+            shared["aht21_ts"] = time.time()
+            shared["aht21_err"] = ""
         except Exception as e:
             shared["aht21_err"] = f"AHT21: {type(e).__name__}: {e}"
         stop_event.wait(AHT21_REFRESH_SEC)
