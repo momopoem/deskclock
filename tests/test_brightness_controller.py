@@ -15,11 +15,22 @@ common_stub = types.ModuleType("utils.common")
 common_stub._log_brt_event = lambda _message: None
 sys.modules["utils.common"] = common_stub
 
-from config import BH1750_WAKE_LX, PIR_DIM_TO, PIR_NO_MOTION_SEC
+from config import (
+    BH1750_WAKE_LX,
+    DIM_AFTER_SEC,
+    LIGHT_OFF_TIMEOUT_SEC,
+    PIR_DIM_TO,
+    PIR_NO_MOTION_SEC,
+)
 from services.brightness_controller import compute_desired_brightness
 
 
 class BrightnessTimeoutTests(unittest.TestCase):
+    def test_configured_no_motion_timeouts(self) -> None:
+        self.assertEqual(PIR_NO_MOTION_SEC, 3 * 60)
+        self.assertEqual(DIM_AFTER_SEC, 3 * 60)
+        self.assertEqual(LIGHT_OFF_TIMEOUT_SEC, 5 * 60)
+
     def test_steady_bright_room_does_not_defeat_pir_timeout(self) -> None:
         shared = {
             "activity_mono": -100.0,

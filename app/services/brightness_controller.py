@@ -48,10 +48,10 @@ def compute_desired_brightness(now_mono: float, shared: dict) -> float:
 
     Spec summary:
       - SR501 is always monitored. Any detection (HIGH) wakes to 100%.
-      - If no motion for PIR_NO_MOTION_SEC (default 5min), dim to PIR_DIM_TO (20%).
+      - If no motion for PIR_NO_MOTION_SEC (default 3min), dim to PIR_DIM_TO (20%).
       - BH1750 is always monitored.
           * 0..BH1750_DARK_LX (default 0..2 lx): treat as lights-off => dim to BH1750_DIM_TO_LIGHTOFF (20%),
-            and if also no motion for 5min => turn OFF (0%).
+            and if also no motion for 3min => turn OFF (0%).
           * >= BH1750_LIGHT_ON_LX (default >=5 lx): treat as light/day => do not dim by lux; dim only by PIR timer.
           * Crossing into >= BH1750_WAKE_LX (default >=10 lx): treat as a
             "wake event" => 100% immediately. A steady bright reading must not
@@ -108,7 +108,7 @@ def compute_desired_brightness(now_mono: float, shared: dict) -> float:
 
     # 3) Decide target by combined rules
     if lux_state == "dark":
-        # Dark room: dim to 20%; if also no motion for 5min => OFF (0%)
+        # Dark room: dim to 20%; if also no motion for 3min => OFF (0%)
         if no_motion:
             return 0.0
         return BH1750_DIM_TO_LIGHTOFF  # 20%
