@@ -593,8 +593,12 @@ class BottomInfoWidget:
                 w_left = total_width(left_parts)
                 w_right = total_width(right_parts)
 
-                surf_unit_left = f_unit.render(air_left_unit, True, color)
-                surf_unit_right = f_unit.render(air_right_unit, True, color)
+                # SI-style symbols are lowercase: ppm / ppb.  hPa keeps its
+                # conventional capitalization.
+                display_unit_left = {"PPM": "ppm", "PPB": "ppb"}.get(air_left_unit, air_left_unit)
+                display_unit_right = {"PPM": "ppm", "PPB": "ppb"}.get(air_right_unit, air_right_unit)
+                surf_unit_left = f_unit.render(display_unit_left, True, color)
+                surf_unit_right = f_unit.render(display_unit_right, True, color)
 
                 # Keep titles on the same vertical line as "外気".  Build CO2
                 # labels from ordinary glyphs because some Japanese font
@@ -610,12 +614,39 @@ class BottomInfoWidget:
                 surf_source_right = font_source.render(air_right_source, True, color)
                 left_title_w = surf_label_left.get_width() + (surf_label_left_sub.get_width() if surf_label_left_sub else 0)
                 right_title_w = surf_label_right.get_width() + (surf_label_right_sub.get_width() if surf_label_right_sub else 0)
-                left_label_w = max(left_title_w, surf_source_left.get_width())
-                right_label_w = max(right_title_w, surf_source_right.get_width())
+
+                # Reserve the maximum label/source/unit width for every selectable
+                # variant.  The title, value, unit, and opposite block therefore
+                # keep exactly the same X positions when the selection or digit
+                # count changes.
+                eco_title_w = font_label.render("eCO", True, color).get_width() + f_sub.render("2", True, color).get_width()
+                pressure_title_w = font_label.render("気圧", True, color).get_width()
+                tvoc_title_w = font_label.render("TVOC", True, color).get_width()
+                co2_title_w = font_label.render("CO", True, color).get_width() + f_sub.render("2", True, color).get_width()
+                left_label_w = max(
+                    eco_title_w,
+                    pressure_title_w,
+                    font_source.render("ENS160", True, color).get_width(),
+                    font_source.render("BME280", True, color).get_width(),
+                )
+                right_label_w = max(
+                    tvoc_title_w,
+                    co2_title_w,
+                    font_source.render("ENS160", True, color).get_width(),
+                    font_source.render("SCD40", True, color).get_width(),
+                )
+                left_unit_slot_w = max(
+                    f_unit.render("ppm", True, color).get_width(),
+                    f_unit.render("hPa", True, color).get_width(),
+                )
+                right_unit_slot_w = max(
+                    f_unit.render("ppb", True, color).get_width(),
+                    f_unit.render("ppm", True, color).get_width(),
+                )
                 label_gap_x = max(4, int(font_label.get_height() * 0.25))
 
-                left_block_w = left_label_w + label_gap_x + w_left + gap_x + surf_unit_left.get_width()
-                right_block_w = right_label_w + label_gap_x + w_right + gap_x + surf_unit_right.get_width()
+                left_block_w = left_label_w + label_gap_x + w_left + gap_x + left_unit_slot_w
+                right_block_w = right_label_w + label_gap_x + w_right + gap_x + right_unit_slot_w
                 total_w = left_block_w + gap_block + right_block_w
                 if left_area_w <= 0 or total_w > left_area_w:
                     return False
@@ -652,8 +683,8 @@ class BottomInfoWidget:
                     blit_lcd_ghost_only(canvas, left_ghost_parts, x_value, baseline_y_out, 0, lcd_bg_color=lcd_bg_color, main_color=color)
                 blit_hstack_baseline(canvas, left_parts, x_value, baseline_y_out, 0, lcd_mode=False, lcd_bg_color=lcd_bg_color, main_color=color)
                 x_unit = x_value + w_left + gap_x
-                blit_text_with_lcd_shadow(canvas, f_unit, air_left_unit, color, x_unit, y_unit_left, lcd_mode=lcd_mode)
-                left_right = x_unit + surf_unit_left.get_width()
+                blit_text_with_lcd_shadow(canvas, f_unit, display_unit_left, color, x_unit, y_unit_left, lcd_mode=lcd_mode)
+                left_right = x_unit + left_unit_slot_w
                 nonlocal air_left_rect_canvas, air_right_rect_canvas
                 air_left_rect_canvas = pygame.Rect(x_label, y_label, left_right - x_label, max(digit_bottom, source_y + surf_source_left.get_height()) - y_label)
 
@@ -677,8 +708,8 @@ class BottomInfoWidget:
                     blit_lcd_ghost_only(canvas, right_ghost_parts, x_value, baseline_y_out, 0, lcd_bg_color=lcd_bg_color, main_color=color)
                 blit_hstack_baseline(canvas, right_parts, x_value, baseline_y_out, 0, lcd_mode=False, lcd_bg_color=lcd_bg_color, main_color=color)
                 x_unit = x_value + w_right + gap_x
-                blit_text_with_lcd_shadow(canvas, f_unit, air_right_unit, color, x_unit, y_unit_right, lcd_mode=lcd_mode)
-                right_right = x_unit + surf_unit_right.get_width()
+                blit_text_with_lcd_shadow(canvas, f_unit, display_unit_right, color, x_unit, y_unit_right, lcd_mode=lcd_mode)
+                right_right = x_unit + right_unit_slot_w
                 air_right_rect_canvas = pygame.Rect(x_label, y_label, right_right - x_label, max(digit_bottom, source_y + surf_source_right.get_height()) - y_label)
                 return True
 
