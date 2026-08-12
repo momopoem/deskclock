@@ -568,7 +568,10 @@ class TimeWidget:
         x_top = (w - top_width) // 2
 
         main_h = max(surf_h_tens.get_height(), surf_h_ones.get_height(), surf_colon_min.get_height())
-        y_top = (h - main_h) // 2 - int(font_main_size * 0.35)
+        # This is the anchor for the complete normal display: the bottom rows
+        # are positioned from time_rect_canvas.  Move the shared anchor slightly
+        # upward so the visible content has balanced top/bottom margins.
+        y_top = (h - main_h) // 2 - int(font_main_size * 0.43)
 
         y_ampm = y_top + main_h - surf_ampm.get_height()
         if lcd_mode and ampm:
