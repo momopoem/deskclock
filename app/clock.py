@@ -794,7 +794,7 @@ def main():
                             continue
 
 
-                        # 1) Indoor touch -> cycle SHT20 → AHT21 → SWITCHBOT (skip invalid)
+                        # 1) Indoor touch -> cycle SHT20 → SWITCHBOT → BME280 (skip invalid)
                         if _pt_in_rect(pt, state.touch_rects_screen.get("indoor")):
                             state.indoor_mode = next_valid_source(
                                 state.indoor_mode,
@@ -1020,6 +1020,9 @@ def main():
         elif state.indoor_mode == "SWITCHBOT":
             in_temp = state.in_temp_c
             in_hum  = state.in_hum_pct
+        elif state.indoor_mode == "BME280":
+            in_temp = state.bme280_temp_c
+            in_hum  = state.bme280_hum_pct
         else:
             # Fallback: whatever is available
             in_temp = state.in_temp_c
