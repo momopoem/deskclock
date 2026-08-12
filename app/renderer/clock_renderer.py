@@ -127,6 +127,14 @@ class BottomInfoCtx:
     ens_aqi: int | None = None
     ens_tvoc: int | None = None
     ens_eco2: int | None = None
+    air_left_kind: str = "ECO2"
+    air_left_value: int | None = None
+    air_left_unit: str = "PPM"
+    air_left_source: str = "ENS160"
+    air_right_kind: str = "TVOC"
+    air_right_value: int | None = None
+    air_right_unit: str = "PPB"
+    air_right_source: str = "ENS160"
 
 
 @dataclass(frozen=True)
@@ -597,6 +605,14 @@ class ClockRenderer:
         ens_aqi = ctx.bottom.ens_aqi
         ens_tvoc = ctx.bottom.ens_tvoc
         ens_eco2 = ctx.bottom.ens_eco2
+        air_left_kind = ctx.bottom.air_left_kind
+        air_left_value = ctx.bottom.air_left_value
+        air_left_unit = ctx.bottom.air_left_unit
+        air_left_source = ctx.bottom.air_left_source
+        air_right_kind = ctx.bottom.air_right_kind
+        air_right_value = ctx.bottom.air_right_value
+        air_right_unit = ctx.bottom.air_right_unit
+        air_right_source = ctx.bottom.air_right_source
 
         sw, sh = self.sw, self.sh
         screen = self.screen
@@ -681,6 +697,14 @@ class ClockRenderer:
             ens_aqi=ens_aqi,
             ens_tvoc=ens_tvoc,
             ens_eco2=ens_eco2,
+            air_left_kind=air_left_kind,
+            air_left_value=air_left_value,
+            air_left_unit=air_left_unit,
+            air_left_source=air_left_source,
+            air_right_kind=air_right_kind,
+            air_right_value=air_right_value,
+            air_right_unit=air_right_unit,
+            air_right_source=air_right_source,
             value_font_path=value_font_path,
             air_bar_colors=theme_spec.air_bar_colors,
             air_bar_outline_color=theme_spec.air_bar_outline_color,
@@ -715,6 +739,8 @@ class ClockRenderer:
         touch_rects_screen["date"] = _canvas_rect_to_screen(date_rect_canvas) if isinstance(date_rect_canvas, pygame.Rect) else None
         touch_rects_screen["time"] = _canvas_rect_to_screen(time_rect_canvas)
         touch_rects_screen["weather"] = _canvas_rect_to_screen(t_res.weather_rect_canvas) if isinstance(getattr(t_res, "weather_rect_canvas", None), pygame.Rect) else None
+        touch_rects_screen["air_left"] = _canvas_rect_to_screen(b_res.air_left_rect_canvas) if isinstance(getattr(b_res, "air_left_rect_canvas", None), pygame.Rect) else None
+        touch_rects_screen["air_right"] = _canvas_rect_to_screen(b_res.air_right_rect_canvas) if isinstance(getattr(b_res, "air_right_rect_canvas", None), pygame.Rect) else None
 
         cal_prev_canvas = None
         cal_next_canvas = None

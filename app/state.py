@@ -51,6 +51,8 @@ class RuntimeUiState:
         "date": None,
         "time": None,
         "weather": None,
+        "air_left": None,
+        "air_right": None,
     })
     last_key: str = ""
     color_changed: bool = False
@@ -92,6 +94,18 @@ class ClockState:
     ens_ts: float = 0.0
     ens_err: str = ""
 
+    bme280_temp_c: Optional[float] = None
+    bme280_hum_pct: Optional[float] = None
+    bme280_pressure_hpa: Optional[float] = None
+    bme280_ts: float = 0.0
+    bme280_err: str = ""
+
+    scd40_co2_ppm: Optional[int] = None
+    scd40_temp_c: Optional[float] = None
+    scd40_hum_pct: Optional[float] = None
+    scd40_ts: float = 0.0
+    scd40_err: str = ""
+
     # SwitchBot indoor
     in_temp_c: Optional[float] = None
     in_hum_pct: Optional[int] = None
@@ -118,6 +132,8 @@ class ClockState:
     outdoor_mode: str = "SWITCHBOT"
     time_mode_24h: bool = False
     theme: str = "default"
+    air_left_mode: str = "ECO2"
+    air_right_mode: str = "TVOC"
     ntp_synced: bool = False
     colon_visible: bool = True
     brightness_cur: float = 1.0
@@ -137,6 +153,12 @@ class ClockState:
         obj.outdoor_mode = ui_state.get("outdoor_mode", obj.outdoor_mode)
         obj.time_mode_24h = bool(ui_state.get("time_mode_24h", obj.time_mode_24h))
         obj.theme = get_theme_spec(ui_state.get("theme", obj.theme)).name
+        obj.air_left_mode = ui_state.get("air_left_mode", obj.air_left_mode)
+        if obj.air_left_mode not in ("ECO2", "PRESSURE"):
+            obj.air_left_mode = "ECO2"
+        obj.air_right_mode = ui_state.get("air_right_mode", obj.air_right_mode)
+        if obj.air_right_mode not in ("TVOC", "CO2"):
+            obj.air_right_mode = "TVOC"
         c = ui_state.get("ui_color", [255, 255, 255])
         if isinstance(c, (list, tuple)) and len(c) == 3:
             try:
@@ -166,7 +188,15 @@ class ClockState:
         self.ui.last_key = value
 
     def save_ui_state(self, save_func) -> None:
-        save_func(self.indoor_mode, self.outdoor_mode, self.time_mode_24h, self.base_color, self.theme)
+        save_func(
+            self.indoor_mode,
+            self.outdoor_mode,
+            self.time_mode_24h,
+            self.base_color,
+            self.theme,
+            self.air_left_mode,
+            self.air_right_mode,
+        )
 
     def __getitem__(self, key: str) -> Any:
         if hasattr(self, key):

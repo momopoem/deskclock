@@ -13,9 +13,11 @@ from config import *
 from services.sensor_service import (
     fetch_aht21_loop,
     fetch_bh1750_loop,
+    fetch_bme280_loop,
     fetch_ens160_loop,
     fetch_pir_loop,
     fetch_sht20_loop,
+    fetch_scd40_loop,
 )
 from services.weather_service import (
     fetch_internet_loop,
@@ -108,8 +110,13 @@ def configure_default_workers(manager: SensorManager, state) -> dict[str, bool]:
 
     if AHT21_ENABLE:
         manager.add_worker("aht21", fetch_aht21_loop, state, stop_event)
+    # Register BME280 before ENS160 so compensation becomes available as early as possible.
+    if BME280_ENABLE:
+        manager.add_worker("bme280", fetch_bme280_loop, state, stop_event)
     if ENS160_ENABLE:
         manager.add_worker("ens160", fetch_ens160_loop, state, stop_event)
+    if SCD40_ENABLE:
+        manager.add_worker("scd40", fetch_scd40_loop, state, stop_event)
 
     # Start as "recent motion" so the screen is visible immediately after boot.
     state.pir_mono = time.monotonic()
