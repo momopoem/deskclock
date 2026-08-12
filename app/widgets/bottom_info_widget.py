@@ -596,17 +596,22 @@ class BottomInfoWidget:
                 surf_unit_left = f_unit.render(air_left_unit, True, color)
                 surf_unit_right = f_unit.render(air_right_unit, True, color)
 
-                # Labels should be placed to the LEFT of each 7-seg value (like "室温"/"外気"),
-                # top-aligned with the 7-seg digits.
-                # Render "eCO₂" with a smaller subscript "2" (bottom-aligned).
-                label_left = "eCO₂" if air_left_kind == "ECO2" else "気圧"
-                label_right = "CO₂" if air_right_kind == "CO2" else "TVOC"
+                # Keep titles on the same vertical line as "外気".  Build CO2
+                # labels from ordinary glyphs because some Japanese font
+                # fallbacks do not contain the Unicode subscript-two glyph.
+                label_left = "eCO" if air_left_kind == "ECO2" else "気圧"
+                label_right = "CO" if air_right_kind == "CO2" else "TVOC"
+                f_sub = load_font(info_font_path, max(5, int(font_label.get_height() * 0.50)))
                 surf_label_left = font_label.render(label_left, True, color)
                 surf_label_right = font_label.render(label_right, True, color)
+                surf_label_left_sub = f_sub.render("2", True, color) if air_left_kind == "ECO2" else None
+                surf_label_right_sub = f_sub.render("2", True, color) if air_right_kind == "CO2" else None
                 surf_source_left = font_source.render(air_left_source, True, color)
                 surf_source_right = font_source.render(air_right_source, True, color)
-                left_label_w = max(surf_label_left.get_width(), surf_source_left.get_width())
-                right_label_w = max(surf_label_right.get_width(), surf_source_right.get_width())
+                left_title_w = surf_label_left.get_width() + (surf_label_left_sub.get_width() if surf_label_left_sub else 0)
+                right_title_w = surf_label_right.get_width() + (surf_label_right_sub.get_width() if surf_label_right_sub else 0)
+                left_label_w = max(left_title_w, surf_source_left.get_width())
+                right_label_w = max(right_title_w, surf_source_right.get_width())
                 label_gap_x = max(4, int(font_label.get_height() * 0.25))
 
                 left_block_w = left_label_w + label_gap_x + w_left + gap_x + surf_unit_left.get_width()
@@ -626,11 +631,15 @@ class BottomInfoWidget:
 
                 x = left_area_x0 + (left_area_w - total_w) // 2
 
-                # Labels: left of value, top-aligned with the 7-seg digits
-                y_label = digit_top
+                # Labels: left of value and aligned with the existing "外気" title.
+                y_label = out_label_y
                 x_label = x
-                label_left_x = x_label + (left_label_w - surf_label_left.get_width()) // 2
+                label_left_x = x_label + (left_label_w - left_title_w) // 2
                 blit_text_with_lcd_shadow(canvas, font_label, label_left, color, label_left_x, y_label, lcd_mode=lcd_mode)
+                if surf_label_left_sub is not None:
+                    left_sub_x = label_left_x + surf_label_left.get_width()
+                    left_sub_y = y_label + surf_label_left.get_height() - surf_label_left_sub.get_height()
+                    blit_text_with_lcd_shadow(canvas, f_sub, "2", color, left_sub_x, left_sub_y, lcd_mode=lcd_mode)
                 source_left_x = x_label + (left_label_w - surf_source_left.get_width()) // 2
                 source_y = y_label + surf_label_left.get_height() + int(font_source.get_height() * 0.15)
                 blit_text_with_lcd_shadow(canvas, font_source, air_left_source, color, source_left_x, source_y, lcd_mode=lcd_mode)
@@ -652,8 +661,12 @@ class BottomInfoWidget:
 
                 # TVOC label + value
                 x_label = x
-                label_right_x = x_label + (right_label_w - surf_label_right.get_width()) // 2
+                label_right_x = x_label + (right_label_w - right_title_w) // 2
                 blit_text_with_lcd_shadow(canvas, font_label, label_right, color, label_right_x, y_label, lcd_mode=lcd_mode)
+                if surf_label_right_sub is not None:
+                    right_sub_x = label_right_x + surf_label_right.get_width()
+                    right_sub_y = y_label + surf_label_right.get_height() - surf_label_right_sub.get_height()
+                    blit_text_with_lcd_shadow(canvas, f_sub, "2", color, right_sub_x, right_sub_y, lcd_mode=lcd_mode)
                 source_right_x = x_label + (right_label_w - surf_source_right.get_width()) // 2
                 blit_text_with_lcd_shadow(canvas, font_source, air_right_source, color, source_right_x, source_y, lcd_mode=lcd_mode)
                 x_value = x_label + right_label_w + label_gap_x
