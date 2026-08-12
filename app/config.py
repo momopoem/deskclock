@@ -4,8 +4,8 @@ import os
 import threading
 
 __product__ = "Desk Side Clock"
-__version__ = "v2.2.0"
-__status__ = "stable"
+__version__ = "v2.3.0"
+__status__ = "development"
 APP_VERSION = __version__
 
 UI_SCALE = 1.2
@@ -22,6 +22,18 @@ ENS160_ADDR = 0x53
 ENS160_REFRESH_SEC = 5
 ENS160_COMP_STALE_SEC = 15.0
 ENS160_VALUE_STALE_SEC = 30.0
+
+BME280_ENABLE = True
+BME280_I2C_BUS = int(os.environ.get("BME280_I2C_BUS", "1"))
+BME280_ADDR = int(os.environ.get("BME280_ADDR", "0x76"), 16)
+BME280_REFRESH_SEC = 5
+BME280_VALUE_STALE_SEC = 30.0
+
+SCD40_ENABLE = True
+SCD40_I2C_BUS = int(os.environ.get("SCD40_I2C_BUS", "1"))
+SCD40_ADDR = int(os.environ.get("SCD40_ADDR", "0x62"), 16)
+SCD40_REFRESH_SEC = 5
+SCD40_VALUE_STALE_SEC = 30.0
 
 SHT20_TEMP_OFFSET_C = -2.1
 SHT20_HUM_OFFSET_PCT = 0

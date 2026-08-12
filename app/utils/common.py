@@ -263,6 +263,8 @@ def load_ui_state():
         "time_mode_24h": False,
         "ui_color": [255, 255, 255],
         "theme": "default",
+        "air_left_mode": "ECO2",
+        "air_right_mode": "TVOC",
     }
     try:
         if not os.path.exists(STATE_PATH):
@@ -284,12 +286,34 @@ def load_ui_state():
         else:
             cc = default["ui_color"]
         theme = str(data.get("theme", default["theme"]) or default["theme"])
-        return {"indoor_mode": im, "outdoor_mode": om, "time_mode_24h": tm, "ui_color": cc, "theme": theme}
+        air_left_mode = str(data.get("air_left_mode", default["air_left_mode"]))
+        if air_left_mode not in ("ECO2", "PRESSURE"):
+            air_left_mode = default["air_left_mode"]
+        air_right_mode = str(data.get("air_right_mode", default["air_right_mode"]))
+        if air_right_mode not in ("TVOC", "CO2"):
+            air_right_mode = default["air_right_mode"]
+        return {
+            "indoor_mode": im,
+            "outdoor_mode": om,
+            "time_mode_24h": tm,
+            "ui_color": cc,
+            "theme": theme,
+            "air_left_mode": air_left_mode,
+            "air_right_mode": air_right_mode,
+        }
     except Exception:
         return default
 
 
-def save_ui_state(indoor_mode: str, outdoor_mode: str, time_mode_24h: bool, ui_color, theme: str = "default"):
+def save_ui_state(
+    indoor_mode: str,
+    outdoor_mode: str,
+    time_mode_24h: bool,
+    ui_color,
+    theme: str = "default",
+    air_left_mode: str = "ECO2",
+    air_right_mode: str = "TVOC",
+):
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
         tmp = STATE_PATH + ".tmp"
@@ -301,6 +325,8 @@ def save_ui_state(indoor_mode: str, outdoor_mode: str, time_mode_24h: bool, ui_c
                     "time_mode_24h": bool(time_mode_24h),
                     "ui_color": list(ui_color) if ui_color is not None else [255, 255, 255],
                     "theme": str(theme or "default"),
+                    "air_left_mode": air_left_mode if air_left_mode in ("ECO2", "PRESSURE") else "ECO2",
+                    "air_right_mode": air_right_mode if air_right_mode in ("TVOC", "CO2") else "TVOC",
                 },
                 f,
                 ensure_ascii=False,

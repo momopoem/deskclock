@@ -17,12 +17,13 @@ Desk Side Clock
 
 Product Name : Desk Side Clock
 Release Type : Product Version
-Version      : v2.2.0
-Status       : Stable
+Version      : v2.3.0
+Status       : Development
 
 Notes:
 - Outside temperature value (7-seg) is shifted left by 15px (final spec)
-- Added ENS160 + AHT21 support (SHT20 remains highest priority for indoor display and ENS160 compensation)
+- Added BME280 pressure and SCD40 CO2 support with persistent air-value touch toggles
+- ENS160 temperature/humidity compensation is sourced from BME280
 - Startup splash shows version for 3 seconds (robust) and then forces one-shot flip
 - Outdoor data can be sourced from SwitchBot Cloud API via env vars (preferred) or Open-Meteo fallback
 """
@@ -89,9 +90,11 @@ from services.sensor_service import (
     _aht21_read_temp_hum_via_i2c,
     fetch_aht21_loop,
     fetch_bh1750_loop,
+    fetch_bme280_loop,
     fetch_ens160_loop,
     fetch_pir_loop,
     fetch_sht20_loop,
+    fetch_scd40_loop,
     read_sht20_indoor,
 )
 from services.weather_service import (
@@ -780,6 +783,16 @@ def main():
                             state.calendar.anim_t0 = 0.0
                             continue
 
+                        # Air value blocks: independently toggle the selected source/value.
+                        if _pt_in_rect(pt, state.touch_rects_screen.get("air_left")):
+                            state.air_left_mode = "PRESSURE" if state.air_left_mode == "ECO2" else "ECO2"
+                            state.save_ui_state(save_ui_state)
+                            continue
+                        if _pt_in_rect(pt, state.touch_rects_screen.get("air_right")):
+                            state.air_right_mode = "CO2" if state.air_right_mode == "TVOC" else "TVOC"
+                            state.save_ui_state(save_ui_state)
+                            continue
+
 
                         # 1) Indoor touch -> cycle SHT20 → AHT21 → SWITCHBOT (skip invalid)
                         if _pt_in_rect(pt, state.touch_rects_screen.get("indoor")):
@@ -1020,7 +1033,27 @@ def main():
         ens_tvoc = state.ens_tvoc_ppb if ens_fresh else None
         ens_eco2 = state.ens_eco2_ppm if ens_fresh else None
 
-        key = f"{int(state.calendar.popup)}{state.calendar.anim_phase}{int(calendar_anim*1000)}{ntp_synced}{int(state.time_mode_24h)}{ampm}{hour_tens_char}{hour_ones_char}{colon_min}{ss}{date_text}{out_text}{in_text}{wcode}{ens_aqi}{ens_tvoc}{ens_eco2}{state.theme}{render_color}"
+        bme280_fresh = _is_fresh(state.bme280_ts, max_age_sec=BME280_VALUE_STALE_SEC)
+        scd40_fresh = _is_fresh(state.scd40_ts, max_age_sec=SCD40_VALUE_STALE_SEC)
+        if state.air_left_mode == "PRESSURE":
+            air_left_value = round(state.bme280_pressure_hpa) if bme280_fresh and state.bme280_pressure_hpa is not None else None
+            air_left_unit = "hPa"
+            air_left_source = "BME280"
+        else:
+            air_left_value = ens_eco2
+            air_left_unit = "PPM"
+            air_left_source = "ENS160"
+
+        if state.air_right_mode == "CO2":
+            air_right_value = state.scd40_co2_ppm if scd40_fresh else None
+            air_right_unit = "PPM"
+            air_right_source = "SCD40"
+        else:
+            air_right_value = ens_tvoc
+            air_right_unit = "PPB"
+            air_right_source = "ENS160"
+
+        key = f"{int(state.calendar.popup)}{state.calendar.anim_phase}{int(calendar_anim*1000)}{ntp_synced}{int(state.time_mode_24h)}{ampm}{hour_tens_char}{hour_ones_char}{colon_min}{ss}{date_text}{out_text}{in_text}{wcode}{ens_aqi}{state.air_left_mode}{air_left_value}{state.air_right_mode}{air_right_value}{state.theme}{render_color}"
         if key != state.last_key or color_changed:
             # Build BottomInfoCtx safely (Phase5 ctor guard)
             bottom_kwargs = dict(
@@ -1060,6 +1093,14 @@ def main():
             if 'ens_aqi' in _bf: bottom_kwargs['ens_aqi'] = ens_aqi
             if 'ens_tvoc' in _bf: bottom_kwargs['ens_tvoc'] = ens_tvoc
             if 'ens_eco2' in _bf: bottom_kwargs['ens_eco2'] = ens_eco2
+            if 'air_left_kind' in _bf: bottom_kwargs['air_left_kind'] = state.air_left_mode
+            if 'air_left_value' in _bf: bottom_kwargs['air_left_value'] = air_left_value
+            if 'air_left_unit' in _bf: bottom_kwargs['air_left_unit'] = air_left_unit
+            if 'air_left_source' in _bf: bottom_kwargs['air_left_source'] = air_left_source
+            if 'air_right_kind' in _bf: bottom_kwargs['air_right_kind'] = state.air_right_mode
+            if 'air_right_value' in _bf: bottom_kwargs['air_right_value'] = air_right_value
+            if 'air_right_unit' in _bf: bottom_kwargs['air_right_unit'] = air_right_unit
+            if 'air_right_source' in _bf: bottom_kwargs['air_right_source'] = air_right_source
             bottom_ctx = BottomInfoCtx(**bottom_kwargs)
 
             renderer.render_and_update_touch_rects(

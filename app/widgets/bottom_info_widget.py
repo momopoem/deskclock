@@ -15,6 +15,8 @@ class BottomInfoWidgetResult:
     indoor_rect_canvas: pygame.Rect
     outdoor_rect_canvas: pygame.Rect
     date_rect_canvas: pygame.Rect
+    air_left_rect_canvas: pygame.Rect | None = None
+    air_right_rect_canvas: pygame.Rect | None = None
 
 def load_font(path, size):
     """Load a TTF font with caching. Falls back to pygame's default font."""
@@ -315,6 +317,14 @@ class BottomInfoWidget:
         ens_aqi,
         ens_tvoc,
         ens_eco2,
+        air_left_kind: str = "ECO2",
+        air_left_value: int | None = None,
+        air_left_unit: str = "PPM",
+        air_left_source: str = "ENS160",
+        air_right_kind: str = "TVOC",
+        air_right_value: int | None = None,
+        air_right_unit: str = "PPB",
+        air_right_source: str = "ENS160",
         value_font_path: str | None = None,
         air_bar_colors = None,
         air_bar_outline_color = None,
@@ -550,21 +560,19 @@ class BottomInfoWidget:
         blit_text_with_lcd_shadow(canvas, font_source, outdoor_mode, color, out_source_x, out_source_y, lcd_mode=lcd_mode)
 
 
-        # ENS160 block (reworked for v1.3.0):
-        # - Remove "空気" + AQI 1-digit number (AQI is expressed by the color bar above)
-        # - Show eCO2 and TVOC as fixed-width 7-seg 4 digits each
-        # - Unit labels PPM / PPB are slightly larger and fixed (no jitter when digits change)
-        if ens_fresh and (ens_tvoc is not None) and (ens_eco2 is not None):
+        # Air values: persistent touch-selectable pairs.
+        # Left: ENS160 eCO2 or BME280 pressure. Right: ENS160 TVOC or SCD40 CO2.
+        air_left_rect_canvas = None
+        air_right_rect_canvas = None
+        if True:
             # Keep a safety margin from the "外気" label to avoid overlap with unit text.
             right_margin = max(10, int(font_label.get_height() * 0.55))
             left_area_x0 = x_out
             left_area_x1 = out_label_x - right_margin
             left_area_w = max(0, left_area_x1 - left_area_x0)
 
-            eco2_v = int(ens_eco2)
-            tvoc_v = int(ens_tvoc)
-            eco2_s = f"{min(max(eco2_v, 0), 9999):4d}"
-            tvoc_s = f"{min(max(tvoc_v, 0), 9999):4d}"
+            left_s = "----" if air_left_value is None else f"{min(max(int(air_left_value), 0), 9999):4d}"
+            right_s = "----" if air_right_value is None else f"{min(max(int(air_right_value), 0), 9999):4d}"
 
             base_val_h = max(10, font_7seg_info.get_height())
             val_scales = (1.00, 0.95, 0.90, 0.85, 0.80, 0.75, 0.70, 0.65, 0.60)
@@ -580,31 +588,30 @@ class BottomInfoWidget:
                 gap_block = max(0, int(f_unit.get_height() * gap_block_mul))
 
                 # Fixed-width 4-digit 7seg runs (spaces become full digit slots)
-                eco2_parts = render_run(f_val, f_unit, eco2_s, color, digit_w_7seg=digit_w_val)
-                tvoc_parts = render_run(f_val, f_unit, tvoc_s, color, digit_w_7seg=digit_w_val)
-                w_eco2 = total_width(eco2_parts)
-                w_tvoc = total_width(tvoc_parts)
+                left_parts = render_run(f_val, f_unit, left_s, color, digit_w_7seg=digit_w_val)
+                right_parts = render_run(f_val, f_unit, right_s, color, digit_w_7seg=digit_w_val)
+                w_left = total_width(left_parts)
+                w_right = total_width(right_parts)
 
-                surf_unit_ppm = f_unit.render("PPM", True, color)
-                surf_unit_ppb = f_unit.render("PPB", True, color)
+                surf_unit_left = f_unit.render(air_left_unit, True, color)
+                surf_unit_right = f_unit.render(air_right_unit, True, color)
 
                 # Labels should be placed to the LEFT of each 7-seg value (like "室温"/"外気"),
                 # top-aligned with the 7-seg digits.
                 # Render "eCO₂" with a smaller subscript "2" (bottom-aligned).
-                surf_label_eco = font_label.render("eCO", True, color)
-                # Subscript "2" should be ~half of "CO" size.
-                f_sub = load_font(info_font_path, max(5, int(font_label.get_height() * 0.50)))
-                surf_label_eco2_sub = f_sub.render("2", True, color)
-
-                def _eco2_label_width() -> int:
-                    return int(surf_label_eco.get_width() + surf_label_eco2_sub.get_width())
-
-                surf_label_tvoc = font_label.render("TVOC", True, color)
+                label_left = "eCO₂" if air_left_kind == "ECO2" else "気圧"
+                label_right = "CO₂" if air_right_kind == "CO2" else "TVOC"
+                surf_label_left = font_label.render(label_left, True, color)
+                surf_label_right = font_label.render(label_right, True, color)
+                surf_source_left = font_source.render(air_left_source, True, color)
+                surf_source_right = font_source.render(air_right_source, True, color)
+                left_label_w = max(surf_label_left.get_width(), surf_source_left.get_width())
+                right_label_w = max(surf_label_right.get_width(), surf_source_right.get_width())
                 label_gap_x = max(4, int(font_label.get_height() * 0.25))
 
-                eco2_block_w = _eco2_label_width() + label_gap_x + w_eco2 + gap_x + surf_unit_ppm.get_width()
-                tvoc_block_w = surf_label_tvoc.get_width() + label_gap_x + w_tvoc + gap_x + surf_unit_ppb.get_width()
-                total_w = eco2_block_w + gap_block + tvoc_block_w
+                left_block_w = left_label_w + label_gap_x + w_left + gap_x + surf_unit_left.get_width()
+                right_block_w = right_label_w + label_gap_x + w_right + gap_x + surf_unit_right.get_width()
+                total_w = left_block_w + gap_block + right_block_w
                 if left_area_w <= 0 or total_w > left_area_w:
                     return False
 
@@ -613,45 +620,53 @@ class BottomInfoWidget:
                 digit_bottom = digit_top + digit_h
                 # Units: subscript-style (slightly lower than the digit bottom),
                 # similar to calendar "年/月/日" feel.
-                unit_sub_px = max(2, int(surf_unit_ppm.get_height() * 0.25))
-                y_unit_ppm = digit_top + (digit_h - surf_unit_ppm.get_height()) + unit_sub_px
-                y_unit_ppb = digit_top + (digit_h - surf_unit_ppb.get_height()) + unit_sub_px
+                unit_sub_px = max(2, int(surf_unit_left.get_height() * 0.25))
+                y_unit_left = digit_top + (digit_h - surf_unit_left.get_height()) + unit_sub_px
+                y_unit_right = digit_top + (digit_h - surf_unit_right.get_height()) + unit_sub_px
 
                 x = left_area_x0 + (left_area_w - total_w) // 2
 
                 # Labels: left of value, top-aligned with the 7-seg digits
                 y_label = digit_top
                 x_label = x
-                # eCO₂ composite label
-                blit_text_with_lcd_shadow(canvas, font_label, "eCO", color, x_label, y_label, lcd_mode=lcd_mode)
-                x_sub = x_label + surf_label_eco.get_width()
-                y_sub = y_label + (surf_label_eco.get_height() - surf_label_eco2_sub.get_height())
-                blit_text_with_lcd_shadow(canvas, f_sub, "2", color, x_sub, y_sub, lcd_mode=lcd_mode)
+                label_left_x = x_label + (left_label_w - surf_label_left.get_width()) // 2
+                blit_text_with_lcd_shadow(canvas, font_label, label_left, color, label_left_x, y_label, lcd_mode=lcd_mode)
+                source_left_x = x_label + (left_label_w - surf_source_left.get_width()) // 2
+                source_y = y_label + surf_label_left.get_height() + int(font_source.get_height() * 0.15)
+                blit_text_with_lcd_shadow(canvas, font_source, air_left_source, color, source_left_x, source_y, lcd_mode=lcd_mode)
 
-                x_value = x_label + _eco2_label_width() + label_gap_x
+                x_value = x_label + left_label_w + label_gap_x
 
                 # eCO2 value
                 if lcd_mode:
-                    eco2_ghost_parts = render_run(f_val, f_unit, "8888", color, digit_w_7seg=digit_w_val)
-                    blit_lcd_ghost_only(canvas, eco2_ghost_parts, x_value, baseline_y_out, 0, lcd_bg_color=lcd_bg_color, main_color=color)
-                blit_hstack_baseline(canvas, eco2_parts, x_value, baseline_y_out, 0, lcd_mode=False, lcd_bg_color=lcd_bg_color, main_color=color)
-                x_unit = x_value + w_eco2 + gap_x
-                blit_text_with_lcd_shadow(canvas, f_unit, "PPM", color, x_unit, y_unit_ppm, lcd_mode=lcd_mode)
+                    left_ghost_parts = render_run(f_val, f_unit, "8888", color, digit_w_7seg=digit_w_val)
+                    blit_lcd_ghost_only(canvas, left_ghost_parts, x_value, baseline_y_out, 0, lcd_bg_color=lcd_bg_color, main_color=color)
+                blit_hstack_baseline(canvas, left_parts, x_value, baseline_y_out, 0, lcd_mode=False, lcd_bg_color=lcd_bg_color, main_color=color)
+                x_unit = x_value + w_left + gap_x
+                blit_text_with_lcd_shadow(canvas, f_unit, air_left_unit, color, x_unit, y_unit_left, lcd_mode=lcd_mode)
+                left_right = x_unit + surf_unit_left.get_width()
+                nonlocal air_left_rect_canvas, air_right_rect_canvas
+                air_left_rect_canvas = pygame.Rect(x_label, y_label, left_right - x_label, max(digit_bottom, source_y + surf_source_left.get_height()) - y_label)
 
-                x = x_unit + surf_unit_ppm.get_width() + gap_block
+                x = left_right + gap_block
 
                 # TVOC label + value
                 x_label = x
-                x_value = x_label + surf_label_tvoc.get_width() + label_gap_x
-                blit_text_with_lcd_shadow(canvas, font_label, "TVOC", color, x_label, y_label, lcd_mode=lcd_mode)
+                label_right_x = x_label + (right_label_w - surf_label_right.get_width()) // 2
+                blit_text_with_lcd_shadow(canvas, font_label, label_right, color, label_right_x, y_label, lcd_mode=lcd_mode)
+                source_right_x = x_label + (right_label_w - surf_source_right.get_width()) // 2
+                blit_text_with_lcd_shadow(canvas, font_source, air_right_source, color, source_right_x, source_y, lcd_mode=lcd_mode)
+                x_value = x_label + right_label_w + label_gap_x
 
                 # TVOC value
                 if lcd_mode:
-                    tvoc_ghost_parts = render_run(f_val, f_unit, "8888", color, digit_w_7seg=digit_w_val)
-                    blit_lcd_ghost_only(canvas, tvoc_ghost_parts, x_value, baseline_y_out, 0, lcd_bg_color=lcd_bg_color, main_color=color)
-                blit_hstack_baseline(canvas, tvoc_parts, x_value, baseline_y_out, 0, lcd_mode=False, lcd_bg_color=lcd_bg_color, main_color=color)
-                x_unit = x_value + w_tvoc + gap_x
-                blit_text_with_lcd_shadow(canvas, f_unit, "PPB", color, x_unit, y_unit_ppb, lcd_mode=lcd_mode)
+                    right_ghost_parts = render_run(f_val, f_unit, "8888", color, digit_w_7seg=digit_w_val)
+                    blit_lcd_ghost_only(canvas, right_ghost_parts, x_value, baseline_y_out, 0, lcd_bg_color=lcd_bg_color, main_color=color)
+                blit_hstack_baseline(canvas, right_parts, x_value, baseline_y_out, 0, lcd_mode=False, lcd_bg_color=lcd_bg_color, main_color=color)
+                x_unit = x_value + w_right + gap_x
+                blit_text_with_lcd_shadow(canvas, f_unit, air_right_unit, color, x_unit, y_unit_right, lcd_mode=lcd_mode)
+                right_right = x_unit + surf_unit_right.get_width()
+                air_right_rect_canvas = pygame.Rect(x_label, y_label, right_right - x_label, max(digit_bottom, source_y + surf_source_right.get_height()) - y_label)
                 return True
 
             gap_block_candidates = (0.35, 0.25, 0.15, 0.10, 0.05, 0.00)
@@ -699,7 +714,13 @@ class BottomInfoWidget:
         else:
             date_rect_canvas = date_prefix_rect_canvas
 
-        return BottomInfoWidgetResult(indoor_rect_canvas=indoor_rect_canvas, outdoor_rect_canvas=outdoor_rect_canvas, date_rect_canvas=date_rect_canvas)
+        return BottomInfoWidgetResult(
+            indoor_rect_canvas=indoor_rect_canvas,
+            outdoor_rect_canvas=outdoor_rect_canvas,
+            date_rect_canvas=date_rect_canvas,
+            air_left_rect_canvas=air_left_rect_canvas,
+            air_right_rect_canvas=air_right_rect_canvas,
+        )
 
 
 # -----------------------------------------------------------------------------

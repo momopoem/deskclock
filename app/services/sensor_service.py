@@ -355,6 +355,197 @@ def fetch_aht21_loop(shared, stop_event):
 
 
 # =========================
+# BME280 (temperature / humidity / pressure)
+# =========================
+
+def _bme280_parse_calibration(cal1: list[int], cal2: list[int]) -> dict[str, int]:
+    """Decode the BME280 calibration registers into signed/unsigned values."""
+    if len(cal1) != 26 or len(cal2) != 7:
+        raise ValueError("invalid BME280 calibration length")
+
+    def u16(data, offset):
+        return int(data[offset] | (data[offset + 1] << 8))
+
+    def s16(data, offset):
+        value = u16(data, offset)
+        return value - 0x10000 if value & 0x8000 else value
+
+    def s8(value):
+        return value - 0x100 if value & 0x80 else value
+
+    def s12(value):
+        return value - 0x1000 if value & 0x800 else value
+
+    return {
+        "T1": u16(cal1, 0), "T2": s16(cal1, 2), "T3": s16(cal1, 4),
+        "P1": u16(cal1, 6), "P2": s16(cal1, 8), "P3": s16(cal1, 10),
+        "P4": s16(cal1, 12), "P5": s16(cal1, 14), "P6": s16(cal1, 16),
+        "P7": s16(cal1, 18), "P8": s16(cal1, 20), "P9": s16(cal1, 22),
+        "H1": int(cal1[25]), "H2": s16(cal2, 0), "H3": int(cal2[2]),
+        "H4": s12((cal2[3] << 4) | (cal2[4] & 0x0F)),
+        "H5": s12((cal2[5] << 4) | (cal2[4] >> 4)),
+        "H6": s8(cal2[6]),
+    }
+
+
+def _bme280_compensate(adc_t: int, adc_p: int, adc_h: int, cal: dict[str, int]):
+    """Return temperature (C), humidity (%RH) and pressure (hPa)."""
+    var1 = (adc_t / 16384.0 - cal["T1"] / 1024.0) * cal["T2"]
+    var2 = ((adc_t / 131072.0 - cal["T1"] / 8192.0) ** 2) * cal["T3"]
+    t_fine = var1 + var2
+    temp_c = t_fine / 5120.0
+
+    var1 = t_fine / 2.0 - 64000.0
+    var2 = var1 * var1 * cal["P6"] / 32768.0
+    var2 += var1 * cal["P5"] * 2.0
+    var2 = var2 / 4.0 + cal["P4"] * 65536.0
+    var1 = (cal["P3"] * var1 * var1 / 524288.0 + cal["P2"] * var1) / 524288.0
+    var1 = (1.0 + var1 / 32768.0) * cal["P1"]
+    if var1 == 0:
+        raise ZeroDivisionError("invalid BME280 pressure calibration")
+    pressure_pa = 1048576.0 - adc_p
+    pressure_pa = (pressure_pa - var2 / 4096.0) * 6250.0 / var1
+    var1 = cal["P9"] * pressure_pa * pressure_pa / 2147483648.0
+    var2 = pressure_pa * cal["P8"] / 32768.0
+    pressure_pa += (var1 + var2 + cal["P7"]) / 16.0
+
+    humidity = t_fine - 76800.0
+    humidity = (
+        adc_h - (cal["H4"] * 64.0 + cal["H5"] / 16384.0 * humidity)
+    ) * (
+        cal["H2"] / 65536.0
+        * (1.0 + cal["H6"] / 67108864.0 * humidity
+           * (1.0 + cal["H3"] / 67108864.0 * humidity))
+    )
+    humidity *= 1.0 - cal["H1"] * humidity / 524288.0
+    humidity = max(0.0, min(100.0, humidity))
+    return float(temp_c), float(humidity), float(pressure_pa / 100.0)
+
+
+def fetch_bme280_loop(shared, stop_event):
+    """Poll BME280 and publish temperature, humidity and pressure."""
+    if not BME280_ENABLE:
+        return
+    try:
+        from smbus2 import SMBus as SMBusClass  # type: ignore
+    except Exception as e:
+        shared["bme280_err"] = f"BME280: smbus2 not available: {type(e).__name__}: {e}"
+        return
+
+    try:
+        with SMBusClass(int(BME280_I2C_BUS)) as bus:
+            with I2C_LOCK:
+                chip_id = int(bus.read_byte_data(BME280_ADDR, 0xD0))
+                if chip_id != 0x60:
+                    raise OSError(f"unexpected chip ID 0x{chip_id:02X}")
+                cal1 = list(bus.read_i2c_block_data(BME280_ADDR, 0x88, 26))
+                cal2 = list(bus.read_i2c_block_data(BME280_ADDR, 0xE1, 7))
+                # Humidity x1, temperature/pressure x1, normal mode, 1000 ms standby.
+                bus.write_byte_data(BME280_ADDR, 0xF2, 0x01)
+                bus.write_byte_data(BME280_ADDR, 0xF5, 0xA0)
+                bus.write_byte_data(BME280_ADDR, 0xF4, 0x27)
+            cal = _bme280_parse_calibration(cal1, cal2)
+            stop_event.wait(0.1)
+
+            while not stop_event.is_set():
+                try:
+                    with I2C_LOCK:
+                        data = list(bus.read_i2c_block_data(BME280_ADDR, 0xF7, 8))
+                    if len(data) != 8:
+                        raise OSError(f"returned {len(data)} bytes, expected 8")
+                    adc_p = (data[0] << 12) | (data[1] << 4) | (data[2] >> 4)
+                    adc_t = (data[3] << 12) | (data[4] << 4) | (data[5] >> 4)
+                    adc_h = (data[6] << 8) | data[7]
+                    temp_c, hum_pct, pressure_hpa = _bme280_compensate(adc_t, adc_p, adc_h, cal)
+                    shared["bme280_temp_c"] = temp_c
+                    shared["bme280_hum_pct"] = hum_pct
+                    shared["bme280_pressure_hpa"] = pressure_hpa
+                    shared["bme280_ts"] = time.time()
+                    shared["bme280_err"] = ""
+                except Exception as e:
+                    shared["bme280_err"] = f"BME280: {type(e).__name__}: {e}"
+                stop_event.wait(BME280_REFRESH_SEC)
+    except Exception as e:
+        shared["bme280_err"] = f"BME280: {type(e).__name__}: {e}"
+
+
+# =========================
+# SCD40 (true CO2 sensor)
+# =========================
+
+def _scd40_crc8(data: list[int] | tuple[int, ...] | bytes) -> int:
+    crc = 0xFF
+    for value in data:
+        crc ^= int(value)
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x31) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    return crc
+
+
+def _scd40_parse_measurement(data: list[int] | bytes):
+    if len(data) != 9:
+        raise ValueError(f"SCD40 returned {len(data)} bytes, expected 9")
+    words = []
+    for offset in (0, 3, 6):
+        pair = data[offset:offset + 2]
+        if _scd40_crc8(pair) != data[offset + 2]:
+            raise ValueError(f"SCD40 CRC mismatch at word {offset // 3}")
+        words.append((int(pair[0]) << 8) | int(pair[1]))
+    co2_ppm = words[0]
+    temp_c = -45.0 + 175.0 * words[1] / 65535.0
+    hum_pct = 100.0 * words[2] / 65535.0
+    return int(co2_ppm), float(temp_c), float(hum_pct)
+
+
+def fetch_scd40_loop(shared, stop_event):
+    """Start SCD40 periodic measurement and publish true CO2 in ppm."""
+    if not SCD40_ENABLE:
+        return
+    try:
+        from smbus2 import SMBus as SMBusClass, i2c_msg  # type: ignore
+    except Exception as e:
+        shared["scd40_err"] = f"SCD40: smbus2 not available: {type(e).__name__}: {e}"
+        return
+
+    def command(bus, value: int):
+        bus.i2c_rdwr(i2c_msg.write(SCD40_ADDR, [(value >> 8) & 0xFF, value & 0xFF]))
+
+    try:
+        with SMBusClass(int(SCD40_I2C_BUS)) as bus:
+            # Stop any measurement left running by a previous process, then restart cleanly.
+            try:
+                with I2C_LOCK:
+                    command(bus, 0x3F86)
+                stop_event.wait(0.5)
+            except OSError:
+                pass
+            with I2C_LOCK:
+                command(bus, 0x21B1)
+            if stop_event.wait(5.0):
+                return
+
+            while not stop_event.is_set():
+                try:
+                    with I2C_LOCK:
+                        command(bus, 0xEC05)
+                        time.sleep(0.002)
+                        msg = i2c_msg.read(SCD40_ADDR, 9)
+                        bus.i2c_rdwr(msg)
+                        data = list(msg)
+                    co2_ppm, temp_c, hum_pct = _scd40_parse_measurement(data)
+                    shared["scd40_co2_ppm"] = co2_ppm
+                    shared["scd40_temp_c"] = temp_c
+                    shared["scd40_hum_pct"] = hum_pct
+                    shared["scd40_ts"] = time.time()
+                    shared["scd40_err"] = ""
+                except Exception as e:
+                    shared["scd40_err"] = f"SCD40: {type(e).__name__}: {e}"
+                stop_event.wait(SCD40_REFRESH_SEC)
+    except Exception as e:
+        shared["scd40_err"] = f"SCD40: {type(e).__name__}: {e}"
+
+
+# =========================
 # ENS160 (Air Quality Sensor)
 # =========================
 
@@ -376,8 +567,7 @@ def fetch_ens160_loop(shared, stop_event):
       - ens_err
 
     Compensation:
-      - Prefer SHT20 (sht20_temp_c/sht20_hum_pct) if fresh.
-      - Otherwise fall back to AHT21 if fresh.
+      - Use fresh BME280 temperature and humidity values.
     """
     if not ENS160_ENABLE:
         return
@@ -424,24 +614,16 @@ def fetch_ens160_loop(shared, stop_event):
                 try:
                     now_ts = time.time()
 
-                    # ---- Pick comp source (SHT20 first) ----
+                    # ---- Pick compensation source (BME280) ----
                     tc = rh = None
 
-                    s_ts = shared.get("sht20_ts")
-                    if isinstance(s_ts, (int, float)) and (now_ts - float(s_ts) <= float(ENS160_COMP_STALE_SEC)):
-                        s_t = shared.get("sht20_temp_c")
-                        s_h = shared.get("sht20_hum_pct")
-                        if s_t is not None and s_h is not None:
-                            tc = float(s_t)
-                            rh = float(s_h)
-                    else:
-                        a_ts = shared.get("aht21_ts")
-                        if isinstance(a_ts, (int, float)) and (now_ts - float(a_ts) <= float(ENS160_COMP_STALE_SEC)):
-                            a_t = shared.get("aht21_temp_c")
-                            a_h = shared.get("aht21_hum_pct")
-                            if a_t is not None and a_h is not None:
-                                tc = float(a_t)
-                                rh = float(a_h)
+                    bme_ts = shared.get("bme280_ts")
+                    if isinstance(bme_ts, (int, float)) and (now_ts - float(bme_ts) <= float(ENS160_COMP_STALE_SEC)):
+                        bme_t = shared.get("bme280_temp_c")
+                        bme_h = shared.get("bme280_hum_pct")
+                        if bme_t is not None and bme_h is not None:
+                            tc = float(bme_t)
+                            rh = float(bme_h)
 
                     # ---- Write compensation (if fresh) ----
                     if tc is not None and rh is not None:
