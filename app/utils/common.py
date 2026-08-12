@@ -19,6 +19,7 @@ from config import (
     STATE_PATH,
     SWITCHBOT_REFRESH_SEC,
     WEATHER_REFRESH_SEC,
+    BME280_VALUE_STALE_SEC,
 )
 
 
@@ -353,6 +354,10 @@ def indoor_source_valid(src: str, weather: dict, use_switchbot_in: bool, sht20_r
         if weather.get("in_temp_c") is None or weather.get("in_hum_pct") is None:
             return False
         return _is_fresh(weather.get("in_ts"), max_age_sec=SWITCHBOT_REFRESH_SEC * 3.0) or (weather.get("in_err", "") == "")
+    if src == "BME280":
+        if weather.get("bme280_temp_c") is None or weather.get("bme280_hum_pct") is None:
+            return False
+        return _is_fresh(weather.get("bme280_ts"), max_age_sec=BME280_VALUE_STALE_SEC)
     return False
 
 
