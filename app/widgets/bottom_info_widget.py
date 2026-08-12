@@ -564,7 +564,7 @@ class BottomInfoWidget:
         # Left: ENS160 eCO2 or BME280 pressure. Right: ENS160 TVOC or SCD40 CO2.
         air_left_rect_canvas = None
         air_right_rect_canvas = None
-        if True:
+        if air_left_kind and air_right_kind:
             # Keep a safety margin from the "外気" label to avoid overlap with unit text.
             right_margin = max(10, int(font_label.get_height() * 0.55))
             left_area_x0 = x_out
