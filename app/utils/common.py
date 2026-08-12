@@ -147,7 +147,7 @@ def fmt_temp_field(temp):
 def fmt_hum_field(hum):
     if hum is None:
         return "--"
-    return f"{hum:d}"
+    return f"{int(round(hum)):d}"
 
 
 def fmt_temp_hum(temp, hum):
