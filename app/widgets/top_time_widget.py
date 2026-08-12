@@ -606,7 +606,7 @@ class TimeWidget:
                 icon_h = int(base_h * WEATHER_ICON_SCALE)
                 avail_h = max(6, (y_sec - y_top) - WEATHER_ICON_MARGIN_Y)
                 icon_h = min(icon_h, avail_h)
-                icon_rect = pygame.Rect(x_sec, y_top + WEATHER_ICON_RAISE_PX, surf_sec.get_width(), icon_h)
+                icon_rect = pygame.Rect(x_sec, y_top - WEATHER_ICON_RAISE_PX, surf_sec.get_width(), icon_h)
                 if lcd_mode:
                     _draw_lcd_icon_with_shadow(canvas, icon_rect, kind, color, brightness_cur, now, stroke=WEATHER_ICON_STROKE)
                 else:
