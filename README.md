@@ -2,12 +2,14 @@
 
 Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型のデスクサイドクロックです。時刻・カレンダー・天気・室内外の温湿度・気圧・CO₂・空気質を表示し、人感・照度・顔認識を利用して画面や照明を制御します。
 
+![DeskSide Clock v2.3.1の画面](screen.png)
+
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.3.0**
-- ステータス: development
-- 対象ブランチ: `agent/bme280-scd40-v2.3.0`
+- バージョン: **v2.3.1**
+- ステータス: release
+- GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
 詳細資料は次のファイルにあります。
