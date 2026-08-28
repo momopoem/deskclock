@@ -17,8 +17,8 @@ Desk Side Clock
 
 Product Name : Desk Side Clock
 Release Type : Product Version
-Version      : v2.3.0
-Status       : Development
+Version      : v2.3.1
+Status       : Release
 
 Notes:
 - Outside temperature value (7-seg) is shifted left by 15px (final spec)

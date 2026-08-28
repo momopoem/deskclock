@@ -4,8 +4,8 @@ import os
 import threading
 
 __product__ = "Desk Side Clock"
-__version__ = "v2.3.0"
-__status__ = "development"
+__version__ = "v2.3.1"
+__status__ = "release"
 APP_VERSION = __version__
 
 UI_SCALE = 1.2
