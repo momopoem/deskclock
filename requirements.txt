@@ -1,7 +1,7 @@
 pygame>=2.6
 requests>=2.31
 numpy>=1.26
-opencv-python>=4.8
+opencv-contrib-python>=4.8
 holidays>=0.45
 jpholiday>=1.0
 smbus2>=0.4

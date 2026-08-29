@@ -184,7 +184,7 @@ def fetch_weather_loop(shared, stop_event):
 
 
 def fetch_internet_loop(shared, stop_event):
-    """Fetch 'Internet' temperature/humidity (and optionally weather_code) from Open-Meteo.
+    """Fetch Open-Meteo temperature/humidity and optionally weather_code.
 
     Used as a selectable source for indoor/outdoor values. Writes to:
       - net_temp_c

@@ -127,7 +127,7 @@ class ClockState:
     weather_ts: float = 0.0
     weather_err: str = ""
 
-    # Internet fallback
+    # Open-Meteo fallback
     net_temp_c: Optional[float] = None
     net_hum_pct: Optional[int] = None
     net_weather_code: Optional[int] = None

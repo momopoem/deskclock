@@ -258,7 +258,7 @@ def draw_weather_icon(screen, rect, kind: str, color, stroke: int = 2, brightnes
 # -----------------------------------------------------------------------------
 
 def fetch_internet_loop(shared, stop_event):
-    """Fetch 'Internet' temperature/humidity (and optionally weather_code) from Open-Meteo.
+    """Fetch Open-Meteo temperature/humidity and optionally weather_code.
 
     Used as a selectable source for indoor/outdoor values. Writes to:
       - net_temp_c
@@ -313,6 +313,8 @@ def load_ui_state():
         # sanitize
         im = data.get("indoor_mode", default["indoor_mode"])
         om = data.get("outdoor_mode", default["outdoor_mode"])
+        if om == "Internet":
+            om = "OPEN_METEO"
         tm = bool(data.get("time_mode_24h", default["time_mode_24h"]))
         if im not in INDOOR_SOURCES:
             im = default["indoor_mode"]
@@ -384,7 +386,7 @@ def outdoor_source_valid(src: str, weather: dict, use_switchbot: bool):
         if weather.get("out_temp_c") is None or weather.get("out_hum_pct") is None:
             return False
         return _is_fresh(weather.get("weather_ts"), max_age_sec=SWITCHBOT_REFRESH_SEC * 3.0) or (weather.get("weather_err", "") == "")
-    if src == "Internet":
+    if src == "OPEN_METEO":
         if weather.get("net_temp_c") is None or weather.get("net_hum_pct") is None:
             return False
         return _is_fresh(weather.get("net_ts"), max_age_sec=WEATHER_REFRESH_SEC * 3.0) or (weather.get("net_err", "") == "")

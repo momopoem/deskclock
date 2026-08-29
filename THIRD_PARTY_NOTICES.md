@@ -43,6 +43,17 @@ non-commercial use and is subject to Open-Meteo's current rate limits and
 terms. Commercial deployments must use an appropriate paid or self-hosted
 endpoint and set `OPEN_METEO_BASE_URL` accordingly.
 
+## SwitchBot Cloud API
+
+SwitchBot Open API is an external service and is not licensed under this
+project's MIT License. Its official documentation limits the Open API to
+personal use; commercial or large-scale use requires prior consultation with
+SwitchBot. Users must comply with the current service terms, request limits,
+and trademark rules.
+
+- Official API documentation: https://github.com/OpenWonderLabs/SwitchBotAPI
+- Terms of Service: https://support.switch-bot.com/hc/en-us/articles/360046272354-TERMS-OF-SERVICE
+
 ## Python and operating-system dependencies
 
 Packages listed in `requirements.txt`, as well as system packages loaded at

@@ -17,7 +17,7 @@ Desk Side Clock
 
 Product Name : Desk Side Clock
 Release Type : Product Version
-Version      : v2.3.2
+Version      : v2.3.3
 Status       : Release
 
 Notes:
@@ -472,8 +472,8 @@ LIGHT_ON_MOTION_HOLD_SEC = 30.0       # finish verification after a short PIR pu
 # and then decide whether to keep it on.
 LIGHT_PROBE_SEC = 8.0
 
-# If Hiroshi is recognized, keep the light on longer.
-HIROSHI_LIGHT_GRACE_SEC = 1800.0  # 30 minutes
+# If the locally configured authorized user is recognized, keep the light on longer.
+AUTHORIZED_USER_LIGHT_GRACE_SEC = 1800.0  # 30 minutes
 
 # If no motion for this long, turn the light off.
 LIGHT_OFF_TIMEOUT_SEC = 300.0  # 3 minutes to dim + 2 minutes
@@ -555,7 +555,7 @@ def run_face_recognize_once() -> dict:
         return {"ok": False, "error": str(e)}
 
 def fetch_internet_loop(shared, stop_event):
-    """Fetch 'Internet' temperature/humidity (and optionally weather_code) from Open-Meteo.
+    """Fetch Open-Meteo temperature/humidity and optionally weather_code.
 
     Used as a selectable source for indoor/outdoor values. Writes to:
       - net_temp_c
@@ -819,7 +819,7 @@ def main():
 
                         
 
-                        # 2) Outdoor touch -> cycle SWITCHBOT → Internet (skip invalid)
+                        # 2) Outdoor touch -> cycle SWITCHBOT → OPEN_METEO (skip invalid)
                         elif _pt_in_rect(pt, state.touch_rects_screen.get("outdoor")):
                             state.outdoor_mode = next_valid_source(
                                 state.outdoor_mode,
@@ -989,7 +989,7 @@ def main():
                                     state.light.face_recognition_pending = False
                                     fr = run_face_recognize_once()
                                     if isinstance(fr, dict) and fr.get("ok") and fr.get("is_authorized_user") is True:
-                                        state.light.authorized_user_until_mono = now_mono + HIROSHI_LIGHT_GRACE_SEC
+                                        state.light.authorized_user_until_mono = now_mono + AUTHORIZED_USER_LIGHT_GRACE_SEC
                             elif state.light.on_attempts < LIGHT_ON_MAX_ATTEMPTS:
                                 r = switchbot_light_on(sb_token, sb_secret, sb_light_id)
                                 state.light.last_cmd_mono = now_mono
@@ -1193,7 +1193,10 @@ def main():
             )
             _bf = getattr(BottomInfoCtx, '__dataclass_fields__', {})
             if 'indoor_mode' in _bf: bottom_kwargs['indoor_mode'] = state.indoor_mode
-            if 'outdoor_mode' in _bf: bottom_kwargs['outdoor_mode'] = state.outdoor_mode
+            if 'outdoor_mode' in _bf:
+                bottom_kwargs['outdoor_mode'] = (
+                    OPEN_METEO_DISPLAY_LABEL if state.outdoor_mode == "OPEN_METEO" else state.outdoor_mode
+                )
             if 'ens_fresh' in _bf: bottom_kwargs['ens_fresh'] = ens_fresh
             if 'in_temp' in _bf: bottom_kwargs['in_temp'] = in_temp
             if 'in_hum' in _bf: bottom_kwargs['in_hum'] = in_hum

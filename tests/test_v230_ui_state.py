@@ -12,7 +12,7 @@ def test_air_modes_round_trip(tmp_path, monkeypatch):
     monkeypatch.setattr(common, "STATE_PATH", str(state_path))
 
     common.save_ui_state(
-        "SHT20", "Internet", True, (10, 20, 30), "default", "PRESSURE", "CO2"
+        "SHT20", "OPEN_METEO", True, (10, 20, 30), "default", "PRESSURE", "CO2"
     )
     loaded = common.load_ui_state()
     state = ClockState.from_ui_snapshot(loaded)
@@ -31,4 +31,18 @@ def test_old_state_defaults_to_ens160_values(tmp_path, monkeypatch):
     loaded = common.load_ui_state()
     assert loaded["air_left_mode"] == "ECO2"
     assert loaded["air_right_mode"] == "TVOC"
+
+
+def test_legacy_internet_source_migrates_to_open_meteo(tmp_path, monkeypatch):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(
+        json.dumps({"indoor_mode": "SHT20", "outdoor_mode": "Internet"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(common, "STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(common, "STATE_PATH", str(state_path))
+
+    loaded = common.load_ui_state()
+
+    assert loaded["outdoor_mode"] == "OPEN_METEO"
 

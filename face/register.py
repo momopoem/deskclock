@@ -4,7 +4,7 @@ import cv2
 import os
 import time
 
-NAME = "authorized_user"
+NAME = os.environ.get("DESKCLOCK_FACE_LABEL", "authorized_user")
 PRIVATE_DIR = os.path.expanduser(
     os.environ.get("DESKCLOCK_FACE_DATA_DIR", "~/.local/share/deskclock/face")
 )

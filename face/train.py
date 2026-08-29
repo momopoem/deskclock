@@ -10,7 +10,7 @@ PRIVATE_DIR = os.path.expanduser(
 DATASET_DIR = os.path.join(PRIVATE_DIR, "dataset")
 MODEL_PATH = os.path.join(PRIVATE_DIR, "models", "lbph.xml")
 
-LABELS = {"authorized_user": 0}
+LABELS = {os.environ.get("DESKCLOCK_FACE_LABEL", "authorized_user"): 0}
 FACE_SIZE = (200, 200)
 
 faces = []

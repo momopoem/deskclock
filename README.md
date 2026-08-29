@@ -2,20 +2,20 @@
 
 Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型のデスクサイドクロックです。時刻・カレンダー・天気・室内外の温湿度・気圧・CO₂・空気質を表示し、人感・照度・顔認識を利用して画面や照明を制御します。
 
-![DeskSide Clock v2.3.2の画面](screen.png)
+![DeskSide Clock v2.3.3の画面](screen.png)
 
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.3.2**
+- バージョン: **v2.3.3**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
 詳細資料は次のファイルにあります。
 
-- `documents/DeskSideClock_基本設計書_v2.3.0.docx`
-- `documents/DeskSideClock_ソフトウェア仕様書_v2.3.0.docx`
+- `documents/DeskSideClock_基本設計書_v2.3.3.docx`
+- `documents/DeskSideClock_ソフトウェア仕様書_v2.3.3.docx`
 
 ## 主な機能
 
@@ -97,17 +97,27 @@ SWITCHBOT_SECRET
 SWITCHBOT_inDeviceId
 SWITCHBOT_outDeviceId
 SWITCHBOT_lightDeviceId
+OPEN_METEO_LATITUDE
+OPEN_METEO_LONGITUDE
+OPEN_METEO_TIMEZONE
+DESKCLOCK_FACE_LABEL
 ```
 
 認証情報をソース、ログ、Issue、スクリーンショットへ記載しないでください。`.gitignore`は`.env`、`switchbot.env`、`secrets/`、`credentials/`を除外します。
 
-顔画像、学習済みモデル、認識時のデバッグ画像は個人データです。Git管理せず、既定で`~/.local/share/deskclock/face`に保存します。保存先は`DESKCLOCK_FACE_DATA_DIR`環境変数で変更できます。このディレクトリのアクセス権とバックアップは運用者が管理してください。
+顔画像、学習済みモデル、認識時のデバッグ画像は個人データです。Git管理せず、既定で`~/.local/share/deskclock/face`に保存します。保存先は`DESKCLOCK_FACE_DATA_DIR`、登録対象のローカルラベルは`DESKCLOCK_FACE_LABEL`環境変数で変更できます。このディレクトリのアクセス権とバックアップは運用者が管理してください。
 
 ### Open-Meteo
 
 > Weather data by Open-Meteo.com (CC BY 4.0)
 
-既定の`api.open-meteo.com`無料APIは、Open-Meteoの現行条件上、非商用利用向けで呼び出し上限があります。本アプリの既定間隔は上限を大幅に下回りますが、商用環境では適切な有料またはセルフホストのエンドポイントを用意し、`OPEN_METEO_BASE_URL`で指定してください。取得データはCC BY 4.0の対象です。
+既定の`api.open-meteo.com`無料APIは、Open-Meteoの現行条件上、非商用利用向けで呼び出し上限があります。本アプリの既定間隔は上限を大幅に下回りますが、商用環境では適切な有料またはセルフホストのエンドポイントを用意し、`OPEN_METEO_BASE_URL`で指定してください。取得データはCC BY 4.0の対象です。画面上では対象データの情報源を`OPEN-METEO.COM`と表示します。
+
+設置地点は`OPEN_METEO_LATITUDE`、`OPEN_METEO_LONGITUDE`、`OPEN_METEO_TIMEZONE`で設定してください。公開ソースの既定値は特定の個人宅や設置場所を示さない汎用値です。正確な設置場所をGitへコミットしないでください。
+
+### SwitchBot Cloud API
+
+SwitchBot Open APIは公式文書上、個人利用向けです。商用利用または大規模利用では、事前にSwitchBotへ相談し、許諾・利用上限・契約条件を確認してください。トークン、シークレット、デバイスIDは非Git管理の環境ファイルから渡してください。
 
 ## 起動とテスト
 

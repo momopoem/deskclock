@@ -2,9 +2,10 @@
 from __future__ import annotations
 import os
 import threading
+from pathlib import Path
 
 __product__ = "Desk Side Clock"
-__version__ = "v2.3.2"
+__version__ = "v2.3.3"
 __status__ = "release"
 APP_VERSION = __version__
 
@@ -41,7 +42,8 @@ SHT20_HUM_OFFSET_PCT = 0
 SHT20_REFRESH_SEC = 5
 SHT20_I2C_ADDR = int(os.environ.get("SHT20_ADDR", "0x40"), 16)
 
-FONT_7SEG_PATH = os.path.expanduser("~/deskclock/fonts/DSEG7Classic-Bold.ttf")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+FONT_7SEG_PATH = str(PROJECT_ROOT / "fonts" / "DSEG7Classic-Bold.ttf")
 INFO_FONT_CANDIDATES = [
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf",
@@ -49,22 +51,23 @@ INFO_FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ]
 
-LAT = 35.0
-LON = 135.0
-TIMEZONE = "Asia/Tokyo"
+LAT = float(os.environ.get("OPEN_METEO_LATITUDE", "35.0"))
+LON = float(os.environ.get("OPEN_METEO_LONGITUDE", "135.0"))
+TIMEZONE = os.environ.get("OPEN_METEO_TIMEZONE", "Asia/Tokyo")
 WEATHER_REFRESH_SEC = 900
 OPEN_METEO_BASE_URL = os.environ.get(
     "OPEN_METEO_BASE_URL",
     "https://api.open-meteo.com/v1/forecast",
 ).rstrip("?")
 OPEN_METEO_ATTRIBUTION = "Weather data by Open-Meteo.com (CC BY 4.0)"
+OPEN_METEO_DISPLAY_LABEL = "OPEN-METEO.COM"
 
 WEATHER_ICON_ENABLE = True
 WEATHER_ICON_MARGIN_Y = 2
 WEATHER_ICON_STROKE = 2
 WEATHER_ICON_SCALE = 1.44
 WEATHER_ICON_RAISE_PX = 16
-WEATHER_ICON_TTF_PATH = os.path.expanduser("~/deskclock/fonts/weathericons/weathericons-regular-webfont.ttf")
+WEATHER_ICON_TTF_PATH = str(PROJECT_ROOT / "fonts" / "weathericons" / "weathericons-regular-webfont.ttf")
 WEATHER_ICON_USE_PSEUDO_COLOR = True
 WEATHER_KIND_COLOR = {
     "sun":       (255, 200, 0),
@@ -136,17 +139,17 @@ NTP_DEGRADED_CHECK_SEC = 5.0 * 60.0
 
 SWITCHBOT_REFRESH_SEC = 60
 INDOOR_SOURCES = ["SHT20", "SWITCHBOT", "BME280"]
-OUTDOOR_SOURCES = ["SWITCHBOT", "Internet"]
+OUTDOOR_SOURCES = ["SWITCHBOT", "OPEN_METEO"]
 STATE_DIR = os.path.expanduser("~/.config/deskclock")
 STATE_PATH = os.path.join(STATE_DIR, "state.json")
 
 SWITCHBOT_LIGHT_TIMEOUT_SEC = 8
 SWITCHBOT_LIGHT_COOLDOWN_SEC = 3.0
 LIGHT_PROBE_SEC = 8.0
-HIROSHI_LIGHT_GRACE_SEC = 1800.0
+AUTHORIZED_USER_LIGHT_GRACE_SEC = 1800.0
 LIGHT_OFF_TIMEOUT_SEC = 300.0
 FACE_RECOG_PY = "/usr/bin/python3"
-FACE_RECOG_SCRIPT = os.path.expanduser("~/deskclock/face/recognize_once.py")
+FACE_RECOG_SCRIPT = str(PROJECT_ROOT / "face" / "recognize_once.py")
 FACE_PRIVATE_DIR = os.path.expanduser(
     os.environ.get("DESKCLOCK_FACE_DATA_DIR", "~/.local/share/deskclock/face")
 )
