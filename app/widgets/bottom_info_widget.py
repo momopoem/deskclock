@@ -494,11 +494,14 @@ class BottomInfoWidget:
             base_c = palette[i]
             active = (level is not None) and ((i + 1) == level)
             if custom_palette:
-                m_c = 1.0 if active else 0.72
+                m_c = 1.0 if active else 0.30
             else:
                 m_c = (1.0 if active else 0.22) * ui_b
             c = _mul_rgb(base_c, m_c)
-            pygame.draw.rect(canvas, c, pygame.Rect(x0, bar_y, w0, AIR_BAR_HEIGHT_PX), border_radius=4)
+            seg_rect = pygame.Rect(x0, bar_y, w0, AIR_BAR_HEIGHT_PX)
+            pygame.draw.rect(canvas, c, seg_rect, border_radius=4)
+            if custom_palette and active:
+                pygame.draw.rect(canvas, _mul_rgb(color, 0.90), seg_rect, width=2, border_radius=4)
 
         # subtle outline (use UI color)
         try:

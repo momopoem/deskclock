@@ -331,11 +331,11 @@ class ClockRenderer:
             COL_RED = (126, 47, 54)
             COL_BLUE = (43, 76, 124)
             COL_GHOST = tuple(
-                int(bg + (fg - bg) * 0.19)
+                int(bg + (fg - bg) * 0.08)
                 for bg, fg in zip(theme_spec.bg_color, theme_spec.fg_color)
             )
             COL_SHADOW = tuple(
-                int(bg + (fg - bg) * 0.34)
+                int(bg + (fg - bg) * 0.26)
                 for bg, fg in zip(theme_spec.bg_color, theme_spec.fg_color)
             )
         else:
