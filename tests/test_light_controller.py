@@ -10,7 +10,10 @@ sys.path.insert(0, str(APP_DIR))
 
 from services.light_controller import (
     arm_light_off,
+    light_is_confirmed,
     light_off_due,
+    lux_sample_is_fresh,
+    switchbot_command_payload,
     switchbot_command_succeeded,
 )
 
@@ -55,6 +58,40 @@ class LightControllerTests(unittest.TestCase):
         self.assertFalse(switchbot_command_succeeded({"statusCode": 190}))
         self.assertFalse(switchbot_command_succeeded({"ok": False}))
         self.assertFalse(switchbot_command_succeeded(None))
+
+    def test_switchbot_on_payload_uses_idempotent_turn_on(self) -> None:
+        self.assertEqual(switchbot_command_payload("turnOn"), {
+            "command": "turnOn",
+            "parameter": "default",
+            "commandType": "command",
+        })
+
+    def test_fresh_lux_sample(self) -> None:
+        self.assertTrue(lux_sample_is_fresh(now_mono=105.0, lux_mono=100.0, stale_sec=10.0))
+        self.assertFalse(lux_sample_is_fresh(now_mono=111.0, lux_mono=100.0, stale_sec=10.0))
+        self.assertFalse(lux_sample_is_fresh(now_mono=105.0, lux_mono=0.0, stale_sec=10.0))
+
+    def test_light_confirmation_by_absolute_lux(self) -> None:
+        self.assertTrue(light_is_confirmed(
+            baseline_lux=0.5,
+            current_lux=5.0,
+            light_on_lx=5.0,
+            min_rise_lx=2.0,
+        ))
+
+    def test_light_confirmation_by_relative_rise(self) -> None:
+        self.assertTrue(light_is_confirmed(
+            baseline_lux=1.0,
+            current_lux=3.1,
+            light_on_lx=5.0,
+            min_rise_lx=2.0,
+        ))
+        self.assertFalse(light_is_confirmed(
+            baseline_lux=1.0,
+            current_lux=2.9,
+            light_on_lx=5.0,
+            min_rise_lx=2.0,
+        ))
 
 
 if __name__ == "__main__":

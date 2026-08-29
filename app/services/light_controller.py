@@ -28,3 +28,39 @@ def switchbot_command_succeeded(response: object) -> bool:
         return False
     status_code = response.get("statusCode")
     return status_code is None or status_code == 100
+
+
+def switchbot_command_payload(command: str) -> dict[str, str]:
+    """Build the exact SwitchBot Cloud API command payload."""
+    return {
+        "command": str(command),
+        "parameter": "default",
+        "commandType": "command",
+    }
+
+
+def lux_sample_is_fresh(*, now_mono: float, lux_mono: float, stale_sec: float) -> bool:
+    """Whether a BH1750 sample is recent enough for light verification."""
+    return (
+        float(lux_mono) > 0.0
+        and 0.0 <= (float(now_mono) - float(lux_mono)) <= float(stale_sec)
+    )
+
+
+def light_is_confirmed(
+    *,
+    baseline_lux: float | None,
+    current_lux: float | None,
+    light_on_lx: float,
+    min_rise_lx: float,
+) -> bool:
+    """Confirm actual illumination using absolute lux or a rise from baseline."""
+    if current_lux is None:
+        return False
+    current = max(0.0, float(current_lux))
+    if current >= float(light_on_lx):
+        return True
+    if baseline_lux is None:
+        return False
+    baseline = max(0.0, float(baseline_lux))
+    return (current - baseline) >= float(min_rise_lx)
