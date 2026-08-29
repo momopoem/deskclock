@@ -13,6 +13,7 @@ import requests
 from config import (
     LAT,
     LON,
+    OPEN_METEO_BASE_URL,
     SWITCHBOT_REFRESH_SEC,
     TIMEZONE,
     WEATHER_ICON_TTF_PATH,
@@ -23,6 +24,12 @@ from config import (
 )
 
 _WEATHER_ICON_FONT_CACHE = {}
+OPEN_METEO_USER_AGENT = "DeskSideClock/2.3.2 (+https://github.com/momopoem/deskclock)"
+
+
+def _open_meteo_url(query: str) -> str:
+    """Build an Open-Meteo URL; paid/self-hosted endpoints can be configured."""
+    return f"{OPEN_METEO_BASE_URL}?{query.lstrip('?')}"
 
 
 def _http_get_json(session: requests.Session, url: str, *, headers=None, timeout=8):
@@ -151,13 +158,12 @@ def fetch_switchbot_indoor(shared, stop_event):
 # -----------------------------------------------------------------------------
 
 def fetch_weather_loop(shared, stop_event):
-    url = (
-        "https://api.open-meteo.com/v1/forecast"
-        f"?latitude={LAT}&longitude={LON}"
+    url = _open_meteo_url(
+        f"latitude={LAT}&longitude={LON}"
         f"&timezone={TIMEZONE}"
         "&current=temperature_2m,relative_humidity_2m,weather_code"
     )
-    headers = {"User-Agent": "deskclock/1.0"}
+    headers = {"User-Agent": OPEN_METEO_USER_AGENT}
 
     with requests.Session() as s:
         while not stop_event.is_set():
@@ -187,13 +193,12 @@ def fetch_internet_loop(shared, stop_event):
       - net_ts
       - net_err
     """
-    url = (
-        "https://api.open-meteo.com/v1/forecast"
-        f"?latitude={LAT}&longitude={LON}"
+    url = _open_meteo_url(
+        f"latitude={LAT}&longitude={LON}"
         f"&timezone={TIMEZONE}"
         "&current=temperature_2m,relative_humidity_2m,weather_code"
     )
-    headers = {"User-Agent": "deskclock/1.0"}
+    headers = {"User-Agent": OPEN_METEO_USER_AGENT}
 
     with requests.Session() as s:
         while not stop_event.is_set():
@@ -217,13 +222,12 @@ def fetch_weathercode_only_loop(shared, stop_event, refresh_sec: int):
 
     Resource-safety: ensure responses are closed to avoid FD leaks.
     """
-    url = (
-        "https://api.open-meteo.com/v1/forecast"
-        f"?latitude={LAT}&longitude={LON}"
+    url = _open_meteo_url(
+        f"latitude={LAT}&longitude={LON}"
         f"&timezone={TIMEZONE}"
         "&current=weather_code"
     )
-    headers = {"User-Agent": "deskclock/1.0"}
+    headers = {"User-Agent": OPEN_METEO_USER_AGENT}
 
     with requests.Session() as s:
         while not stop_event.is_set():

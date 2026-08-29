@@ -4,8 +4,11 @@ import cv2
 import os
 import numpy as np
 
-DATASET_DIR = os.path.expanduser("~/deskclock/face/dataset")
-MODEL_PATH  = os.path.expanduser("~/deskclock/face/models/lbph.xml")
+PRIVATE_DIR = os.path.expanduser(
+    os.environ.get("DESKCLOCK_FACE_DATA_DIR", "~/.local/share/deskclock/face")
+)
+DATASET_DIR = os.path.join(PRIVATE_DIR, "dataset")
+MODEL_PATH = os.path.join(PRIVATE_DIR, "models", "lbph.xml")
 
 LABELS = {"authorized_user": 0}
 FACE_SIZE = (200, 200)

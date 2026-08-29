@@ -268,8 +268,7 @@ def fetch_internet_loop(shared, stop_event):
       - net_err
     """
     url = (
-        "https://api.open-meteo.com/v1/forecast"
-        f"?latitude={LAT}&longitude={LON}"
+        f"{OPEN_METEO_BASE_URL}?latitude={LAT}&longitude={LON}"
         f"&timezone={TIMEZONE}"
         "&current=temperature_2m,relative_humidity_2m,weather_code"
     )
