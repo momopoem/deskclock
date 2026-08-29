@@ -40,6 +40,13 @@ class LightControlState:
     authorized_user_until_mono: float = 0.0
     deadline_mono: float = 0.0
     prev_pir_value: int = 0
+    on_verify_active: bool = False
+    on_baseline_lux: Optional[float] = None
+    on_next_action_mono: float = 0.0
+    on_next_action: str = ""
+    on_attempts: int = 0
+    on_failed_latched: bool = False
+    face_recognition_pending: bool = False
 
 
 @dataclass

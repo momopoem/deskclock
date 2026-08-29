@@ -2,12 +2,12 @@
 
 Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型のデスクサイドクロックです。時刻・カレンダー・天気・室内外の温湿度・気圧・CO₂・空気質を表示し、人感・照度・顔認識を利用して画面や照明を制御します。
 
-![DeskSide Clock v2.3.1の画面](screen.png)
+![DeskSide Clock v2.3.2の画面](screen.png)
 
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.3.1**
+- バージョン: **v2.3.2**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
@@ -25,6 +25,7 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 - タッチ操作による表示情報の切り替え
 - PIR人感センサーと照度センサーによる自動減光・画面消灯・復帰
 - 顔認識とSwitchBot Cloud APIを組み合わせた照明制御
+- 人感検知中の`turnOn`再送とBH1750による実点灯確認・不達再試行
 - NTP同期状態の監視
 - 状態選択の永続化
 
@@ -123,6 +124,15 @@ python -m compileall -q app tests
 ```
 
 センサー診断スクリプトを実行する際は、DeskSide Clock本体と同じI²Cバスへ同時アクセスしないよう、必要に応じてサービスを停止してください。
+
+### 照明再送・点灯確認の実機テスト
+
+1. 部屋を暗くし、`tail -f ~/deskclock/log/clock.log | grep --line-buffered '\[LGT\]'`を開きます。
+2. PIRの前で動き、`api_command=turnOn`の初回送信と、3秒後の`verification=repeat-turnOn`を確認します。
+3. 照明が点くと`verification=confirmed`と実測luxが記録されます。
+4. 不達を再現するには、SwitchBot Hubの赤外線送信部を一時的に遮ります。最大3回の`turnOn`後も暗い場合、`[LGT] 点灯確認失敗`が記録されます。
+
+赤外線を遮るテストではHubの電源を切らず、放熱口を塞がないでください。ログ上の`result=OK`はAPI受付成功、`verification=confirmed`はBH1750による実点灯確認を意味します。
 
 ## 著作権・ライセンス・利用上の制限
 

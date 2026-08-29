@@ -17,7 +17,7 @@ Desk Side Clock
 
 Product Name : Desk Side Clock
 Release Type : Product Version
-Version      : v2.3.1
+Version      : v2.3.2
 Status       : Release
 
 Notes:
@@ -105,7 +105,10 @@ from services.weather_service import (
 from services.brightness_controller import _apply_brightness
 from services.light_controller import (
     arm_light_off,
+    light_is_confirmed,
     light_off_due,
+    lux_sample_is_fresh,
+    switchbot_command_payload,
     switchbot_command_succeeded,
 )
 from state import ClockState
@@ -459,6 +462,11 @@ def is_night_time(now: datetime) -> bool:
 # =========================
 SWITCHBOT_LIGHT_TIMEOUT_SEC = 8
 SWITCHBOT_LIGHT_COOLDOWN_SEC = 3.0   # prevent rapid repeated commands
+LIGHT_ON_REPEAT_SEC = 3.0            # unconditional second turnOn while PIR remains active
+LIGHT_ON_VERIFY_SEC = 3.0            # allow BH1750 to observe the result of each transmission
+LIGHT_ON_MAX_ATTEMPTS = 3            # initial + unconditional repeat + failed-verification retry
+LIGHT_ON_MIN_RISE_LX = 2.0           # relative rise can confirm light below the absolute threshold
+LIGHT_ON_MOTION_HOLD_SEC = 30.0       # finish verification after a short PIR pulse/API latency
 
 # When motion happens in a dark state, briefly turn on the light to improve face recognition
 # and then decide whether to keep it on.
@@ -478,7 +486,7 @@ def switchbot_send_command(session: requests.Session, token: str, secret: str, d
     """
     url = f"https://api.switch-bot.com/v1.1/devices/{device_id}/commands"
     headers = make_switchbot_headers(token, secret)
-    payload = {"command": command, "parameter": "default", "commandType": "command"}
+    payload = switchbot_command_payload(command)
     try:
         r = session.post(url, headers=headers, json=payload, timeout=SWITCHBOT_LIGHT_TIMEOUT_SEC)
         r.raise_for_status()
@@ -487,13 +495,13 @@ def switchbot_send_command(session: requests.Session, token: str, secret: str, d
         return {"ok": False, "error": f"SwitchBot cmd {command}: {type(e).__name__}: {e}"}
 
 def switchbot_light_on(token: str, secret: str, light_device_id: str) -> dict:
-    _log_light_event(f"command=ON device={light_device_id} requested")
+    _log_light_event(f"command=ON api_command=turnOn device={light_device_id} requested")
     with requests.Session() as s:
         res = switchbot_send_command(s, token, secret, light_device_id, "turnOn")
     if not switchbot_command_succeeded(res):
-        _log_light_event(f"command=ON device={light_device_id} result=NG error={res.get('error', '')}")
+        _log_light_event(f"command=ON api_command=turnOn device={light_device_id} result=NG error={res.get('error', '')}")
     else:
-        _log_light_event(f"command=ON device={light_device_id} result=OK")
+        _log_light_event(f"command=ON api_command=turnOn device={light_device_id} result=OK")
     return res
 
 def switchbot_light_off(token: str, secret: str, light_device_id: str) -> dict:
@@ -688,6 +696,13 @@ def main():
         else 0.0
     )
     state.light.prev_pir_value = int(state.pir_value or 0)
+    state.light.on_verify_active = False
+    state.light.on_baseline_lux = None
+    state.light.on_next_action_mono = 0.0
+    state.light.on_next_action = ""
+    state.light.on_attempts = 0
+    state.light.on_failed_latched = False
+    state.light.face_recognition_pending = False
 
     stop_event = threading.Event()
     service_deps = build_service_dependencies(state=state, stop_event=stop_event)
@@ -896,24 +911,112 @@ def main():
             # - On PIR rising edge (and only when dark / DIM / OFF), we run face recognition once.
             #   Recognition does not extend the no-motion OFF timer.
             if state.light.enabled:
-                if pir_v == 1:
-                    # Turn ON as soon as motion is detected (best-effort)
-                    if (not state.light.is_on) and ((now_mono - state.light.last_cmd_mono) >= SWITCHBOT_LIGHT_COOLDOWN_SEC):
+                if pir_rise:
+                    # A new detection may retry a cycle that previously exhausted its attempts.
+                    state.light.on_failed_latched = False
+
+                light_cycle_motion_active = (
+                    pir_v == 1
+                    or (
+                        state.light.on_verify_active
+                        and t_no_motion <= LIGHT_ON_MOTION_HOLD_SEC
+                    )
+                )
+                if light_cycle_motion_active:
+                    # Start one verification cycle per continuous PIR detection.
+                    if (
+                        pir_v == 1
+                        and not state.light.is_on
+                        and not state.light.on_verify_active
+                        and not state.light.on_failed_latched
+                        and ((now_mono - state.light.last_cmd_mono) >= SWITCHBOT_LIGHT_COOLDOWN_SEC)
+                    ):
                         r = switchbot_light_on(sb_token, sb_secret, sb_light_id)
                         state.light.last_cmd_mono = now_mono
-                        if switchbot_command_succeeded(r):
-                            state.light.is_on = True
+                        state.light.on_verify_active = True
+                        state.light.on_baseline_lux = lux_f
+                        state.light.on_attempts = 1
+                        state.light.on_next_action = "repeat"
+                        state.light.on_next_action_mono = now_mono + LIGHT_ON_REPEAT_SEC
+                        state.light.face_recognition_pending = bool(
+                            pir_rise and (is_dark or disp_state in ("DIM", "OFF"))
+                        )
+                        _log_light_event(
+                            f"verification=start baseline_lux={lux_f!r} attempts=1 "
+                            f"api_ok={switchbot_command_succeeded(r)}"
+                        )
 
-                    # Face recognition only on rising edge in conditions where the room might be too dark.
-                    if pir_rise and (is_dark or disp_state in ("DIM", "OFF")):
-                        fr = run_face_recognize_once()
-                        if isinstance(fr, dict) and fr.get("ok") and fr.get("is_authorized_user") is True:
-                            # Retained for recognition state compatibility; it does not extend light-off.
-                            state.light.authorized_user_until_mono = now_mono + HIROSHI_LIGHT_GRACE_SEC
+                    if (
+                        state.light.on_verify_active
+                        and now_mono >= state.light.on_next_action_mono
+                    ):
+                        if state.light.on_next_action == "repeat":
+                            # This is deliberately unconditional with respect to the estimated
+                            # light state. Motion is still recent, so send the exact turnOn again.
+                            r = switchbot_light_on(sb_token, sb_secret, sb_light_id)
+                            state.light.last_cmd_mono = now_mono
+                            state.light.on_attempts += 1
+                            state.light.on_next_action = "verify"
+                            state.light.on_next_action_mono = now_mono + LIGHT_ON_VERIFY_SEC
+                            _log_light_event(
+                                f"verification=repeat-turnOn attempts={state.light.on_attempts} "
+                                f"api_ok={switchbot_command_succeeded(r)}"
+                            )
+
+                        elif state.light.on_next_action == "verify":
+                            lux_fresh = lux_sample_is_fresh(
+                                now_mono=now_mono,
+                                lux_mono=state.lux_mono,
+                                stale_sec=BH1750_STALE_SEC,
+                            )
+                            confirmed = lux_fresh and light_is_confirmed(
+                                baseline_lux=state.light.on_baseline_lux,
+                                current_lux=lux_f,
+                                light_on_lx=BH1750_LIGHT_ON_LX,
+                                min_rise_lx=LIGHT_ON_MIN_RISE_LX,
+                            )
+                            if confirmed:
+                                state.light.is_on = True
+                                state.light.on_verify_active = False
+                                state.light.on_next_action = ""
+                                _log_light_event(
+                                    f"verification=confirmed lux={lux_f!r} "
+                                    f"baseline_lux={state.light.on_baseline_lux!r} "
+                                    f"attempts={state.light.on_attempts}"
+                                )
+                                # Face recognition can block for up to 12 seconds, so it runs
+                                # only after retransmission and physical light verification finish.
+                                if state.light.face_recognition_pending:
+                                    state.light.face_recognition_pending = False
+                                    fr = run_face_recognize_once()
+                                    if isinstance(fr, dict) and fr.get("ok") and fr.get("is_authorized_user") is True:
+                                        state.light.authorized_user_until_mono = now_mono + HIROSHI_LIGHT_GRACE_SEC
+                            elif state.light.on_attempts < LIGHT_ON_MAX_ATTEMPTS:
+                                r = switchbot_light_on(sb_token, sb_secret, sb_light_id)
+                                state.light.last_cmd_mono = now_mono
+                                state.light.on_attempts += 1
+                                state.light.on_next_action_mono = now_mono + LIGHT_ON_VERIFY_SEC
+                                _log_light_event(
+                                    f"verification=retry-turnOn lux={lux_f!r} lux_fresh={lux_fresh} "
+                                    f"attempts={state.light.on_attempts} "
+                                    f"api_ok={switchbot_command_succeeded(r)}"
+                                )
+                            else:
+                                _log_light_event(
+                                    f"点灯確認失敗 lux={lux_f!r} lux_fresh={lux_fresh} "
+                                    f"baseline_lux={state.light.on_baseline_lux!r} "
+                                    f"attempts={state.light.on_attempts}"
+                                )
+                                state.light.is_on = False
+                                state.light.on_verify_active = False
+                                state.light.on_next_action = ""
+                                state.light.on_failed_latched = True
+                                state.light.face_recognition_pending = False
 
                     # Every detection restarts the fixed no-motion deadline.
                     # Identity recognition must not keep an empty room lit.
-                    state.light.deadline_mono = arm_light_off(now_mono, LIGHT_OFF_TIMEOUT_SEC)
+                    if pir_v == 1:
+                        state.light.deadline_mono = arm_light_off(now_mono, LIGHT_OFF_TIMEOUT_SEC)
 
                 else:
                     # No motion: if the timer has expired, turn OFF (best-effort)
@@ -927,6 +1030,10 @@ def main():
                         state.light.last_cmd_mono = now_mono
                         if switchbot_command_succeeded(r):
                             state.light.is_on = False
+                            state.light.on_verify_active = False
+                            state.light.on_next_action = ""
+                            state.light.on_attempts = 0
+                            state.light.face_recognition_pending = False
                             state.light.deadline_mono = 0.0
                             state.light.authorized_user_until_mono = 0.0
 
