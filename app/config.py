@@ -53,6 +53,11 @@ LAT = 35.7043
 LON = 139.6673
 TIMEZONE = "Asia/Tokyo"
 WEATHER_REFRESH_SEC = 900
+OPEN_METEO_BASE_URL = os.environ.get(
+    "OPEN_METEO_BASE_URL",
+    "https://api.open-meteo.com/v1/forecast",
+).rstrip("?")
+OPEN_METEO_ATTRIBUTION = "Weather data by Open-Meteo.com (CC BY 4.0)"
 
 WEATHER_ICON_ENABLE = True
 WEATHER_ICON_MARGIN_Y = 2
@@ -142,4 +147,7 @@ HIROSHI_LIGHT_GRACE_SEC = 1800.0
 LIGHT_OFF_TIMEOUT_SEC = 300.0
 FACE_RECOG_PY = "/usr/bin/python3"
 FACE_RECOG_SCRIPT = os.path.expanduser("~/deskclock/face/recognize_once.py")
+FACE_PRIVATE_DIR = os.path.expanduser(
+    os.environ.get("DESKCLOCK_FACE_DATA_DIR", "~/.local/share/deskclock/face")
+)
 FACE_RECOG_TIMEOUT_SEC = 12

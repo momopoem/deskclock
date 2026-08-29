@@ -5,7 +5,10 @@ import os
 import time
 
 NAME = "hiroshi"
-SAVE_DIR = os.path.expanduser(f"~/deskclock/face/dataset/{NAME}")
+PRIVATE_DIR = os.path.expanduser(
+    os.environ.get("DESKCLOCK_FACE_DATA_DIR", "~/.local/share/deskclock/face")
+)
+SAVE_DIR = os.path.join(PRIVATE_DIR, "dataset", NAME)
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 HAAR = "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"

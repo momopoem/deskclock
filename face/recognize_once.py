@@ -7,7 +7,10 @@ import json
 import time
 import math
 
-MODEL_PATH = os.path.expanduser("~/deskclock/face/models/lbph.xml")
+PRIVATE_DIR = os.path.expanduser(
+    os.environ.get("DESKCLOCK_FACE_DATA_DIR", "~/.local/share/deskclock/face")
+)
+MODEL_PATH = os.path.join(PRIVATE_DIR, "models", "lbph.xml")
 
 HAAR_LIST = [
     "/usr/share/opencv4/haarcascades/haarcascade_frontalface_alt2.xml",
@@ -32,7 +35,7 @@ MIN_AREA = 8000
 # ★重要：切り出しを「縮める」。0.18 = 矩形の左右上下を18%ずつ内側へ
 INSET = 0.18
 
-DEBUG_DIR = os.path.expanduser("~/deskclock/face")
+DEBUG_DIR = PRIVATE_DIR
 DEBUG_FRAME = os.path.join(DEBUG_DIR, "debug_frame.jpg")
 DEBUG_GRAY  = os.path.join(DEBUG_DIR, "debug_gray.jpg")
 DEBUG_FACE  = os.path.join(DEBUG_DIR, "debug_face.jpg")

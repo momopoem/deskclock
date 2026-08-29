@@ -46,7 +46,6 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 | HC-SR501 PIRセンサー | 人感検出、GPIO 17 |
 | カメラ | OpenCVによる顔検出・顔認識 |
 | SwitchBot対応照明・温湿度計 | Cloud API経由の照明制御・室内外データ取得 |
-| Android TV対応機器 | `androidtvremote2`による電源・キー操作補助 |
 
 I²C機器は原則としてバス1を共有し、アプリケーション内のロックでアクセスを直列化しています。実際の配線、I²Cアドレス、GPIO番号は導入環境に合わせて確認してください。
 
@@ -72,7 +71,6 @@ I²C機器は原則としてバス1を共有し、アプリケーション内の
 | opencv-contrib-python | 顔検出・LBPH顔認識 |
 | holidays / jpholiday | 祝日判定 |
 | smbus2 | I²C通信 |
-| androidtvremote2 | Android TVリモート操作 |
 
 Raspberry Pi側では、用途に応じて`gpiod`、`i2c-tools`、日本語フォント、Wayland環境などのシステムパッケージも必要です。
 
@@ -84,10 +82,9 @@ app/                 メインアプリケーション
   renderer/          画面描画
   widgets/           時計・情報表示ウィジェット
   test/              実機向けセンサー診断スクリプト
-face/                顔登録・認識、画像、学習モデル
+face/                顔登録・認識コード（個人データはリポジトリ外）
 fonts/               同梱フォント
 tests/               自動テスト
-tv_cert/             Android TV接続補助とクライアント証明書
 documents/           設計・仕様資料
 run-clock.sh         systemdから呼び出す起動スクリプト
 ```
@@ -105,6 +102,14 @@ SWITCHBOT_lightDeviceId
 ```
 
 認証情報をソース、ログ、Issue、スクリーンショットへ記載しないでください。`.gitignore`は`.env`、`switchbot.env`、`secrets/`、`credentials/`を除外します。
+
+顔画像、学習済みモデル、認識時のデバッグ画像は個人データです。Git管理せず、既定で`~/.local/share/deskclock/face`に保存します。保存先は`DESKCLOCK_FACE_DATA_DIR`環境変数で変更できます。このディレクトリのアクセス権とバックアップは運用者が管理してください。
+
+### Open-Meteo
+
+> Weather data by Open-Meteo.com (CC BY 4.0)
+
+既定の`api.open-meteo.com`無料APIは、Open-Meteoの現行条件上、非商用利用向けで呼び出し上限があります。本アプリの既定間隔は上限を大幅に下回りますが、商用環境では適切な有料またはセルフホストのエンドポイントを用意し、`OPEN_METEO_BASE_URL`で指定してください。取得データはCC BY 4.0の対象です。
 
 ## 起動とテスト
 
@@ -134,33 +139,27 @@ python -m compileall -q app tests
 
 赤外線を遮るテストではHubの電源を切らず、放熱口を塞がないでください。ログ上の`result=OK`はAPI受付成功、`verification=confirmed`はBH1750による実点灯確認を意味します。
 
-## 著作権・ライセンス・利用上の制限
+## 著作権・ライセンス
 
 ### 本プロジェクトのコードと資料
 
-現時点で、このリポジトリにはプロジェクト全体へ適用する`LICENSE`ファイルがありません。各ソースには`Copyright 2026 (C) Hiroshi Ishikawa. powered by momopoem inc.`との表示がありますが、これは第三者に複製、改変、再配布、商用利用を許諾するものではありません。
-
-したがって、明示的な許可を得ていない第三者は、本プロジェクトのコード、設計資料、画像、学習済みモデルを公開・再配布・商用利用しないでください。将来LICENSEファイルが追加された場合は、その内容を優先してください。
+本プロジェクトのオリジナルソフトウェアはMIT Licenseで提供します。条件と免責は`LICENSE`を参照してください。同梱する第三者フォント、取得データ、依存パッケージにはそれぞれのライセンスが適用されます。詳細は`THIRD_PARTY_NOTICES.md`を参照してください。
 
 ### 同梱フォント
 
-- `fonts/DSEG7Classic-Bold.ttf`: DSEG Font Family。SIL Open Font License 1.1。Copyright keshikan、Reserved Font Name「DSEG」。フォントを取り出せる形式で再配布する場合は、著作権表示またはOFLライセンス文の同梱が必要です。改変フォントを配布する場合もOFL 1.1を維持し、Reserved Font Nameの条件を守ってください。
-- `fonts/weathericons/weathericons-regular-webfont.ttf`: Weather Icons。フォントはSIL Open Font License 1.1。元のアイコンデザインはLukas Bischoff、フォント等はErik Flowersによります。
-- OSから読み込むNoto Sans CJK、DejaVu Sansなどには、それぞれの配布元ライセンスが適用されます。
-
-このリポジトリにはフォントのライセンス全文が同梱されていません。リポジトリを第三者へ配布する前に、各ライセンス原文と著作権表示を追加してください。
+- `fonts/DSEG7Classic-Bold.ttf`: SIL Open Font License 1.1。`fonts/DSEG-LICENSE.txt`を同梱します。
+- `fonts/weathericons/weathericons-regular-webfont.ttf`: SIL Open Font License 1.1。`fonts/weathericons/LICENSE.txt`を同梱します。
+- OSから読み込むNoto Sans CJK、DejaVu Sansなどはリポジトリに同梱せず、OS側の各ライセンスが適用されます。
 
 ### 外部ライブラリとサービス
 
 - PythonパッケージおよびOSパッケージには、それぞれ固有のライセンスが適用されます。`requirements.txt`は依存関係の一覧であり、ライセンス許諾文ではありません。製品配布時は、実際に組み込む版のライセンスとNOTICE要件を確認してください。
-- Open-Meteo APIから得られるデータはCC BY 4.0に基づき、利用時にはOpen-Meteoおよびデータ提供者への適切な帰属表示が必要です。商用・高頻度利用については、利用時点のOpen-Meteo利用条件も確認してください。
-- SwitchBot Cloud APIおよびAndroid TV連携は各サービス・製品の利用規約、API制限、商標条件に従います。本プロジェクトは各サービス提供者による公式製品ではありません。
+- Open-Meteoの帰属、データライセンス、無料APIの非商用条件は上記の「Open-Meteo」および`THIRD_PARTY_NOTICES.md`を参照してください。
+- SwitchBot Cloud APIは同サービスの利用規約、API制限、商標条件に従います。本プロジェクトはSwitchBotの公式製品ではありません。
 
 ### 個人情報・認証情報
 
-`face/`には個人を識別し得る顔画像と学習済みLBPHモデルが含まれます。これらは生体情報・個人情報として扱い、本人の同意なく複製、公開、第三者提供しないでください。
-
-`tv_cert/client.pem`と`tv_cert/client.key`は接続用の証明書・秘密鍵です。秘密鍵を含むリポジトリの公開や第三者配布は禁止し、漏えいの可能性がある場合は対象機器とのペアリングを解除して鍵を再発行してください。公開リポジトリへ移行する場合は、履歴を含めて認証情報と個人画像を除去する必要があります。
+顔画像、学習済みLBPHモデル、デバッグ画像はリポジトリに含めません。生体情報・個人情報として、リポジトリ外でアクセス制御してください。証明書、秘密鍵、APIトークンもGitにコミットしないでください。
 
 ## 免責
 

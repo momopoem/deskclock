@@ -20,6 +20,8 @@ from services.sensor_service import (
     fetch_scd40_loop,
 )
 from services.weather_service import (
+    OPEN_METEO_USER_AGENT,
+    _open_meteo_url,
     fetch_internet_loop,
     fetch_switchbot_indoor,
     fetch_switchbot_outdoor,
@@ -70,13 +72,12 @@ class SensorManager:
 def _prime_open_meteo(state) -> None:
     """One-shot Open-Meteo fetch used when SwitchBot outdoor data is not configured."""
     try:
-        url0 = (
-            "https://api.open-meteo.com/v1/forecast"
-            f"?latitude={LAT}&longitude={LON}"
+        url0 = _open_meteo_url(
+            f"latitude={LAT}&longitude={LON}"
             f"&timezone={TIMEZONE}"
             "&current=temperature_2m,relative_humidity_2m,weather_code"
         )
-        r0 = requests.get(url0, timeout=8, headers={"User-Agent": "deskclock/1.0"})
+        r0 = requests.get(url0, timeout=8, headers={"User-Agent": OPEN_METEO_USER_AGENT})
         try:
             r0.raise_for_status()
             cur0 = r0.json().get("current", {})

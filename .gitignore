@@ -21,6 +21,12 @@ switchbot.env
 secrets/
 credentials/
 
+# Biometric/personal face-recognition data (kept outside Git)
+face/*.jpg
+face/dataset/
+face/models/
+face/debug_*.jpg
+
 # Editor and OS
 .vscode/
 .idea/
