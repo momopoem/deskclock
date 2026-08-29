@@ -2,7 +2,7 @@
 
 set -e
 
-APPDIR="$HOME/deskclock"
+APPDIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOGDIR="$APPDIR/log"
 PY="$APPDIR/venv/bin/python"
 

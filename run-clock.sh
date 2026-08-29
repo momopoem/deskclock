@@ -4,7 +4,7 @@ set -euo pipefail
 
 export PYTHONDONTWRITEBYTECODE=1
 
-BASE="PROJECT_DIR"
+BASE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PY="${BASE}/venv/bin/python"
 APP="${BASE}/app/clock.py"
 LOGDIR="${BASE}/log"
@@ -25,8 +25,8 @@ echo "USER=$(id -un) UID=$(id -u) GID=$(id -g)"
 echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}"
 echo "-------------------------------------------"
 
-#if [ -f "$HOME/.profile" ]; then
-#  source "$HOME/.profile"
+#if [ -f "${HOME}/.profile" ]; then
+#  source "${HOME}/.profile"
 #fi
 
 #export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"

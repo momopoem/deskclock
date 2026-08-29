@@ -31,8 +31,6 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 
 ## ハードウェア構成
 
-現在の実機`momoRB5`を基準にしています。
-
 | 機器 | 用途・接続 |
 |---|---|
 | Raspberry Pi 5 Model B Rev 1.1 | メインコンピューター |
@@ -55,10 +53,10 @@ I²C機器は原則としてバス1を共有し、アプリケーション内の
 
 - OS: Debian GNU/Linux 13（Trixie）
 - カーネル: `6.18.39+rpt-rpi-2712`
-- Python仮想環境: `PROJECT_DIR/venv`
+- Python仮想環境: `./venv`
 - 画面: Wayland + pygame（SDL Waylandバックエンド）
 - 起動管理: user systemdの`deskclock.service`
-- ログ: `PROJECT_DIR/log/clock.log`
+- ログ: `./log/clock.log`
 - 永続状態: `~/.config/deskclock/state.json`
 
 主要なPython依存関係は以下です。
@@ -132,7 +130,7 @@ python -m compileall -q app tests
 
 ### 照明再送・点灯確認の実機テスト
 
-1. 部屋を暗くし、`tail -f ~/deskclock/log/clock.log | grep --line-buffered '\[LGT\]'`を開きます。
+1. プロジェクトディレクトリで部屋を暗くし、`tail -f ./log/clock.log | grep --line-buffered '\[LGT\]'`を開きます。
 2. PIRの前で動き、`api_command=turnOn`の初回送信と、3秒後の`verification=repeat-turnOn`を確認します。
 3. 照明が点くと`verification=confirmed`と実測luxが記録されます。
 4. 不達を再現するには、SwitchBot Hubの赤外線送信部を一時的に遮ります。最大3回の`turnOn`後も暗い場合、`[LGT] 点灯確認失敗`が記録されます。

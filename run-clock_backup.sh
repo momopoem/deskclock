@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ---- paths ----
-BASE="PROJECT_DIR"
+BASE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PY="${BASE}/venv/bin/python"
 APP="${BASE}/app/clock.py"
 LOGDIR="${BASE}/log"
@@ -32,9 +32,9 @@ echo "-------------------------------------------"
 # SwitchBot env vars etc. (you already use ~/.profile)
 # NOTE: systemd user service does NOT always load ~/.profile automatically.
 # We explicitly source it here to match your working manual method.
-if [ -f "$HOME/.profile" ]; then
+if [ -f "${HOME}/.profile" ]; then
   # shellcheck disable=SC1091
-  source "$HOME/.profile"
+  source "${HOME}/.profile"
 fi
 
 # ---- wait for GUI session readiness (Wayland preferred) ----
