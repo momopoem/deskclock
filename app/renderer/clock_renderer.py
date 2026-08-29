@@ -210,7 +210,7 @@ class ClockRenderer:
         self._calendar_cache_plan_key: tuple | None = None
         self._calendar_prewarm_offsets: list[int] = []
         self._calendar_cache_lock = threading.Lock()
-        self._dim_surface_cache: dict[tuple[int, int, int], pygame.Surface] = {}
+        self._dim_surface_cache: dict[tuple[int, ...], pygame.Surface] = {}
         self._cal_last_offset: int | None = None
         self._cal_slide_from_offset: int = 0
         self._cal_slide_to_offset: int = 0
@@ -222,9 +222,17 @@ class ClockRenderer:
     def _calendar_base_months(self, now: _dt.datetime | _dt.date) -> tuple[int, int]:
         return int(getattr(now, "year")), int(getattr(now, "month"))
 
-    def _schedule_calendar_cache_refresh(self, *, now: _dt.datetime | _dt.date, panel_size: tuple[int, int], info_font_path: str | None) -> None:
+    def _schedule_calendar_cache_refresh(
+        self,
+        *,
+        now: _dt.datetime | _dt.date,
+        panel_size: tuple[int, int],
+        info_font_path: str | None,
+        theme_name: str = "default",
+    ) -> None:
         base_y, base_m = self._calendar_base_months(now)
-        plan_key = (base_y, base_m, int(panel_size[0]), int(panel_size[1]), info_font_path or "")
+        theme_name = get_theme_spec(theme_name).name
+        plan_key = (base_y, base_m, int(panel_size[0]), int(panel_size[1]), info_font_path or "", theme_name)
         if plan_key == self._calendar_cache_plan_key:
             return
         self._calendar_cache_plan_key = plan_key
@@ -237,8 +245,8 @@ class ClockRenderer:
         stale = []
         for k in self._calendar_panel_cache.keys():
             try:
-                _, _, yy, mm, fp = k
-                if (yy, mm) not in allowed or fp != (info_font_path or ""):
+                _, _, yy, mm, fp, cached_theme = k
+                if (yy, mm) not in allowed or fp != (info_font_path or "") or cached_theme != theme_name:
                     stale.append(k)
             except Exception:
                 stale.append(k)
@@ -248,7 +256,16 @@ class ClockRenderer:
         for k in stale_h:
             self._holiday_month_cache.pop(k, None)
 
-    def warm_calendar_cache_step(self, *, now: _dt.datetime | _dt.date, w: int, h: int, info_font_path: str | None, budget_steps: int = 2) -> None:
+    def warm_calendar_cache_step(
+        self,
+        *,
+        now: _dt.datetime | _dt.date,
+        w: int,
+        h: int,
+        info_font_path: str | None,
+        theme_name: str = "default",
+        budget_steps: int = 2,
+    ) -> None:
         popup_w = int(w * 0.737)
         old_popup_h = int(h * 0.605)
         old_popup_y = int(h * 0.165)
@@ -263,12 +280,23 @@ class ClockRenderer:
         panel_gap = int((popup_w - pad_x * 2) * 0.040)
         panel_w = max(1, ((popup_w - pad_x * 2) - panel_gap) // 2)
         panel_h = max(1, old_content_h)
-        self._schedule_calendar_cache_refresh(now=now, panel_size=(panel_w, panel_h), info_font_path=info_font_path)
+        self._schedule_calendar_cache_refresh(
+            now=now,
+            panel_size=(panel_w, panel_h),
+            info_font_path=info_font_path,
+            theme_name=theme_name,
+        )
         steps = 0
         while self._calendar_prewarm_offsets and steps < max(1, int(budget_steps)):
             off = self._calendar_prewarm_offsets.pop(0)
             yy, mm = _month_add(int(getattr(now, "year")), int(getattr(now, "month")), off)
-            self._get_month_panel_cached(panel_size=(panel_w, panel_h), yy=yy, mm=mm, info_font_path=info_font_path)
+            self._get_month_panel_cached(
+                panel_size=(panel_w, panel_h),
+                yy=yy,
+                mm=mm,
+                info_font_path=info_font_path,
+                theme_name=theme_name,
+            )
             steps += 1
 
     def _get_holiday_map_cached(self, year: int, month: int) -> dict[int, str]:
@@ -287,17 +315,35 @@ class ClockRenderer:
         yy: int,
         mm: int,
         info_font_path: str | None,
+        theme_name: str = "default",
     ) -> tuple[pygame.Surface, dict[int, pygame.Rect]]:
-        key = (panel_size[0], panel_size[1], yy, mm, info_font_path or "")
+        theme_spec = get_theme_spec(theme_name)
+        lcd_mode = theme_spec.name == "lcd"
+        key = (panel_size[0], panel_size[1], yy, mm, info_font_path or "", theme_spec.name)
         cached = self._calendar_panel_cache.get(key)
         if cached is not None:
             return cached
 
         panel_w, panel_h = panel_size
         surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        COL_WHITE = (255, 255, 255)
-        COL_RED = (255, 64, 64)
-        COL_BLUE = (80, 150, 255)
+        if lcd_mode:
+            COL_WHITE = theme_spec.fg_color
+            COL_RED = (126, 47, 54)
+            COL_BLUE = (43, 76, 124)
+            COL_GHOST = tuple(
+                int(bg + (fg - bg) * 0.19)
+                for bg, fg in zip(theme_spec.bg_color, theme_spec.fg_color)
+            )
+            COL_SHADOW = tuple(
+                int(bg + (fg - bg) * 0.34)
+                for bg, fg in zip(theme_spec.bg_color, theme_spec.fg_color)
+            )
+        else:
+            COL_WHITE = (255, 255, 255)
+            COL_RED = (255, 64, 64)
+            COL_BLUE = (80, 150, 255)
+            COL_GHOST = COL_WHITE
+            COL_SHADOW = COL_WHITE
 
         dseg_title = _load_font(FONT_7SEG_PATH, int(panel_h * 0.082))
         dseg_day = _load_font(FONT_7SEG_PATH, int(panel_h * 0.073))
@@ -316,6 +362,16 @@ class ClockRenderer:
         title_y = title_top_gap
         title_x = (panel_w - title_total_w) // 2
         title_baseline = title_y + max(year_digits.get_height(), month_digits.get_height())
+        if lcd_mode:
+            ghost_year = dseg_title.render("8888", True, COL_GHOST)
+            ghost_month = dseg_title.render("88" if mm >= 10 else "8", True, COL_GHOST)
+            surf.blit(ghost_year, (title_x, title_baseline - ghost_year.get_height()))
+            month_ghost_x = title_x + year_digits.get_width() + title_gap + year_unit.get_width() + title_gap * 2
+            surf.blit(ghost_month, (month_ghost_x, title_baseline - ghost_month.get_height()))
+            year_shadow = dseg_title.render(f"{yy:04d}", True, COL_SHADOW)
+            month_shadow = dseg_title.render(f"{mm}", True, COL_SHADOW)
+            surf.blit(year_shadow, (title_x + 2, title_baseline - year_shadow.get_height() + 2))
+            surf.blit(month_shadow, (month_ghost_x + 2, title_baseline - month_shadow.get_height() + 2))
         surf.blit(year_digits, (title_x, title_baseline - year_digits.get_height()))
         x = title_x + year_digits.get_width() + title_gap
         surf.blit(year_unit, (x, title_baseline - year_unit.get_height()))
@@ -372,6 +428,12 @@ class ClockRenderer:
                 ds = dseg_day.render(f"{day:2d}", True, col)
                 dx = x + cell_w - num_pad_r - ds.get_width()
                 dy = y + num_top
+                if lcd_mode:
+                    ghost_day = dseg_day.render("88", True, COL_GHOST)
+                    ghost_dx = x + cell_w - num_pad_r - ghost_day.get_width()
+                    surf.blit(ghost_day, (ghost_dx, dy))
+                    shadow_day = dseg_day.render(f"{day:2d}", True, COL_SHADOW)
+                    surf.blit(shadow_day, (dx + 2, dy + 2))
                 surf.blit(ds, (dx, dy))
                 day_boxes[day] = pygame.Rect(x, y, cell_w, cell_h)
 
@@ -395,6 +457,7 @@ class ClockRenderer:
         panel_rect: pygame.Rect,
         day_box: pygame.Rect,
         alpha_fg: int,
+        color: tuple[int, int, int] = (255, 255, 255),
     ) -> None:
         hi = pygame.Rect(
             panel_rect.left + day_box.left + max(2, int(day_box.width * 0.04)),
@@ -404,7 +467,7 @@ class ClockRenderer:
         )
         # Keep the day number fully visible: draw only a light outline,
         # and extend the box slightly downward per the requested layout.
-        pygame.draw.rect(dst, (255, 255, 255, alpha_fg), hi, width=2, border_radius=10)
+        pygame.draw.rect(dst, (*color, alpha_fg), hi, width=2, border_radius=10)
 
     def _blit_panel_pair(
         self,
@@ -417,6 +480,7 @@ class ClockRenderer:
         info_font_path: str | None,
         today: _dt.date,
         alpha_fg: int,
+        theme_name: str = "default",
     ) -> None:
         gap = int(content_rect.width * 0.060)
         panel_w = (content_rect.width - gap) // 2
@@ -435,6 +499,7 @@ class ClockRenderer:
                 yy=py,
                 mm=pm,
                 info_font_path=info_font_path,
+                theme_name=theme_name,
             )
             if alpha_fg < 255:
                 s = panel_surf.copy()
@@ -443,7 +508,13 @@ class ClockRenderer:
             else:
                 dst.blit(panel_surf, panel_rect.topleft)
             if py == today.year and pm == today.month and today.day in day_boxes:
-                self._draw_today_highlight(dst=dst, panel_rect=panel_rect, day_box=day_boxes[today.day], alpha_fg=alpha_fg)
+                self._draw_today_highlight(
+                    dst=dst,
+                    panel_rect=panel_rect,
+                    day_box=day_boxes[today.day],
+                    alpha_fg=alpha_fg,
+                    color=get_theme_spec(theme_name).fg_color,
+                )
 
     def _draw_calendar_overlay(self, *, canvas: pygame.Surface, w: int, h: int, ctx: RenderCtx) -> tuple[pygame.Rect | None, pygame.Rect | None]:
         now = ctx.now
@@ -452,13 +523,18 @@ class ClockRenderer:
             self._cal_slide_active = False
             return None, None
 
-        # backdrop fade (cached per size/alpha)
-        dim_alpha = int(170 * anim)
-        dim_key = (w, h, dim_alpha)
+        theme_spec = get_theme_spec(getattr(ctx, "theme", "default"))
+        lcd_mode = theme_spec.name == "lcd"
+
+        # Backdrop follows the active display material. LCD mode uses a light
+        # blue-green veil instead of the default black fade.
+        dim_alpha = int((72 if lcd_mode else 170) * anim)
+        dim_rgb = theme_spec.fg_color if lcd_mode else (0, 0, 0)
+        dim_key = (w, h, dim_alpha, *dim_rgb)
         dim = self._dim_surface_cache.get(dim_key)
         if dim is None:
             dim = pygame.Surface((w, h), pygame.SRCALPHA)
-            dim.fill((0, 0, 0, dim_alpha))
+            dim.fill((*dim_rgb, dim_alpha))
             self._dim_surface_cache[dim_key] = dim
             if len(self._dim_surface_cache) > 24:
                 self._dim_surface_cache.clear()
@@ -478,10 +554,13 @@ class ClockRenderer:
         popup_rect = pygame.Rect(popup_x, popup_y, popup_w, popup_h)
 
         popup = pygame.Surface((popup_rect.width, popup_rect.height), pygame.SRCALPHA)
-        COL_WHITE = (255, 255, 255)
-        COL_BG = (0, 0, 0)
+        COL_WHITE = theme_spec.fg_color if lcd_mode else (255, 255, 255)
+        COL_BG = (194, 213, 184) if lcd_mode else (0, 0, 0)
         alpha_fg = max(0, min(255, int(255 * anim)))
 
+        if lcd_mode:
+            shadow_rect = popup.get_rect().move(5, 6)
+            pygame.draw.rect(popup, (67, 84, 78, min(alpha_fg, 72)), shadow_rect, border_radius=18)
         pygame.draw.rect(popup, (*COL_BG, alpha_fg), popup.get_rect(), border_radius=18)
         pygame.draw.rect(popup, (*COL_WHITE, alpha_fg), popup.get_rect(), width=2, border_radius=18)
 
@@ -518,7 +597,17 @@ class ClockRenderer:
         content_local = pygame.Rect(0, 0, content.width, content.height)
 
         y0, m0 = _month_add(int(getattr(now, "year")), int(getattr(now, "month")), month_offset)
-        self._blit_panel_pair(dst=content_layer, content_rect=content_local, base_left_offset=0, yy=y0, mm=m0, info_font_path=ctx.bottom.info_font_path, today=today, alpha_fg=alpha_fg)
+        self._blit_panel_pair(
+            dst=content_layer,
+            content_rect=content_local,
+            base_left_offset=0,
+            yy=y0,
+            mm=m0,
+            info_font_path=ctx.bottom.info_font_path,
+            today=today,
+            alpha_fg=alpha_fg,
+            theme_name=theme_spec.name,
+        )
 
         popup.blit(content_layer, content.topleft)
 

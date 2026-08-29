@@ -16,11 +16,11 @@ class ThemeSpec:
 
 
 LCD_BAR_COLORS = (
-    (44, 67, 96),
-    (78, 128, 98),
-    (122, 116, 46),
-    (120, 84, 36),
-    (106, 42, 32),
+    (68, 112, 164),
+    (82, 158, 111),
+    (184, 166, 62),
+    (190, 122, 54),
+    (172, 72, 65),
 )
 
 THEME_ORDER = ["default", "lcd"]
@@ -38,7 +38,7 @@ _THEME_MAP: dict[str, ThemeSpec] = {
         fg_color=(24, 41, 74),
         use_base_color=False,
         air_bar_colors=LCD_BAR_COLORS,
-        air_bar_outline_color=(64, 92, 94),
+        air_bar_outline_color=(42, 67, 92),
     ),
 }
 

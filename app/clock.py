@@ -852,7 +852,14 @@ def main():
         now = datetime.now()
         # Background calendar prewarm/cache refresh (startup + every month rollover)
         try:
-            renderer.warm_calendar_cache_step(now=now, w=w, h=h, info_font_path=info_font_path, budget_steps=2)
+            renderer.warm_calendar_cache_step(
+                now=now,
+                w=w,
+                h=h,
+                info_font_path=info_font_path,
+                theme_name=getattr(state, "theme", "default"),
+                budget_steps=2,
+            )
         except Exception:
             pass
 

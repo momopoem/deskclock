@@ -494,7 +494,7 @@ class BottomInfoWidget:
             base_c = palette[i]
             active = (level is not None) and ((i + 1) == level)
             if custom_palette:
-                m_c = 0.92 if active else 0.55
+                m_c = 1.0 if active else 0.72
             else:
                 m_c = (1.0 if active else 0.22) * ui_b
             c = _mul_rgb(base_c, m_c)

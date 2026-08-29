@@ -201,14 +201,23 @@ def draw_weather_icon_line(screen, rect, kind: str, color, stroke: int = 2):
     circle((cx, cy - 1), r)
     line((cx, cy + r), (cx, min(y1, cy + r + 3)))
 
-def draw_weather_icon(screen, rect, kind: str, color, stroke: int = 2, brightness: float = 1.0, is_night: bool = False):
+def draw_weather_icon(
+    screen,
+    rect,
+    kind: str,
+    color,
+    stroke: int = 2,
+    brightness: float = 1.0,
+    is_night: bool = False,
+    use_pseudo_color: bool = True,
+):
     """Draw weather icon using Weather Icons TTF + pseudo-color (fallback to line icon)."""
     if rect.width <= 0 or rect.height <= 0:
         return
 
     # Decide base color (pseudo-color per kind, or UI color)
     icon_base = color
-    if WEATHER_ICON_USE_PSEUDO_COLOR:
+    if WEATHER_ICON_USE_PSEUDO_COLOR and use_pseudo_color:
         c = WEATHER_KIND_COLOR.get(kind) if 'WEATHER_KIND_COLOR' in globals() else None
         if c:
             icon_base = c
@@ -513,8 +522,26 @@ def _render_lcd_ghost(font: pygame.font.Font, text: str, bg_color, fg_color) -> 
 def _draw_lcd_icon_with_shadow(screen, rect, kind: str, main_color, brightness: float, now, stroke: int = 2):
     shadow = _make_lcd_shadow_color(main_color)
     shadow_rect = pygame.Rect(rect.left + 2, rect.top + 2, rect.width, rect.height)
-    draw_weather_icon(screen, shadow_rect, kind, shadow, stroke=stroke, brightness=brightness, is_night=is_night_time(now))
-    draw_weather_icon(screen, rect, kind, main_color, stroke=stroke, brightness=brightness, is_night=is_night_time(now))
+    draw_weather_icon(
+        screen,
+        shadow_rect,
+        kind,
+        shadow,
+        stroke=stroke,
+        brightness=brightness,
+        is_night=is_night_time(now),
+        use_pseudo_color=False,
+    )
+    draw_weather_icon(
+        screen,
+        rect,
+        kind,
+        main_color,
+        stroke=stroke,
+        brightness=brightness,
+        is_night=is_night_time(now),
+        use_pseudo_color=False,
+    )
 
 class TimeWidget:
     """Top line widget: AM/PM + HH:MM + SS + optional weather icon."""
