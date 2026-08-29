@@ -4,28 +4,28 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 
 ### デフォルトテーマ
 
-![DeskSide Clock v2.3.3のデフォルトテーマ](screen1.png)
+![DeskSide Clock v2.3.5のデフォルトテーマ](screen1.png)
 
 ### カレンダー表示
 
-![DeskSide Clock v2.3.3のカレンダー表示](screen2.png)
+![DeskSide Clock v2.3.5のカレンダー表示](screen2.png)
 
 ### LCDテーマ
 
-![DeskSide Clock v2.3.3のLCDテーマ](screen3.png)
+![DeskSide Clock v2.3.5のLCDテーマ](screen3.png)
 
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.3.3**
+- バージョン: **v2.3.5**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
 詳細資料は次のファイルにあります。
 
-- `documents/DeskSideClock_基本設計書_v2.3.3.docx`
-- `documents/DeskSideClock_ソフトウェア仕様書_v2.3.3.docx`
+- `documents/DeskSideClock_基本設計書_v2.3.5.docx`
+- `documents/DeskSideClock_ソフトウェア仕様書_v2.3.5.docx`
 
 ## 主な機能
 
