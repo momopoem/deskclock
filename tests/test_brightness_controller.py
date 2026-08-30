@@ -13,6 +13,7 @@ sys.path.insert(0, str(APP_DIR))
 # Stub it so this pure-logic test does not require pygame.
 common_stub = types.ModuleType("utils.common")
 common_stub._log_brt_event = lambda _message: None
+previous_common = sys.modules.get("utils.common")
 sys.modules["utils.common"] = common_stub
 
 from config import (
@@ -23,6 +24,15 @@ from config import (
     PIR_NO_MOTION_SEC,
 )
 from services.brightness_controller import compute_desired_brightness
+
+# Do not leak the stub into subsequently collected tests.
+if previous_common is None:
+    sys.modules.pop("utils.common", None)
+else:
+    sys.modules["utils.common"] = previous_common
+utils_package = sys.modules.get("utils")
+if utils_package is not None and getattr(utils_package, "common", None) is common_stub:
+    delattr(utils_package, "common")
 
 
 class BrightnessTimeoutTests(unittest.TestCase):
