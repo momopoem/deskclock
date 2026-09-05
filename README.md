@@ -17,12 +17,15 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.3.6**
+- バージョン: **v2.3.7**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
-詳細資料は次のファイルにあります。
+v2.3.7では、全8種類の物理センサーの個別・一括診断と自動テストをソースに同梱しました。
+追加ZIPの展開は不要です。テストの手順は [センサー診断ガイド](app/test/README.md) を参照してください。
+
+詳細資料は次のファイルにあります（設計・仕様資料と掲載画面はv2.3.6版を継続使用）。
 
 - `documents/DeskSideClock_基本設計書_v2.3.6.docx`
 - `documents/DeskSideClock_ソフトウェア仕様書_v2.3.6.docx`
@@ -142,11 +145,14 @@ journalctl --user -u deskclock.service
 依存関係がそろった開発環境では、次のコマンドでテストできます。
 
 ```bash
-python -m unittest discover -s tests -v
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
 python -m compileall -q app tests
 ```
 
 センサー診断スクリプトを実行する際は、DeskSide Clock本体と同じI²Cバスへ同時アクセスしないよう、必要に応じてサービスを停止してください。
+
+全8種類の個別・一括実機診断と自動テストの実行方法は [センサー診断ガイド](app/test/README.md) を参照してください。
 
 ### 照明再送・点灯確認の実機テスト
 

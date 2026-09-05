@@ -17,7 +17,7 @@ Desk Side Clock
 
 Product Name : Desk Side Clock
 Release Type : Product Version
-Version      : v2.3.6
+Version      : v2.3.7
 Status       : Release
 
 Notes:
