@@ -4,6 +4,14 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 
 import pytest
+import sys
+sys.path.insert(0, str(Path(__file__).parents[1] / 'app'))
+from services.presence_controller import PresenceController
+
+
+class State(NS):
+    def __setitem__(self, key, value):
+        setattr(self, key, value)
 
 
 def event_loop():
@@ -24,13 +32,16 @@ def context(events, display='OFF', pressing=False):
     saved = []
     pg = NS(KEYDOWN=1, K_ESCAPE=27, MOUSEBUTTONDOWN=2, MOUSEBUTTONUP=3,
             FINGERDOWN=4, FINGERUP=5, event=NS(get=lambda: events))
-    state = NS(base_color=(97, 227, 138), activity_mono=0,
+    state = State(base_color=(97, 227, 138), activity_mono=0,
+               pir_value=0, pir_err='', pir_mono=0,
                calendar=NS(popup=False), touch_rects_screen={},
                save_ui_state=lambda fn: saved.append(True))
     return dict(pygame=pg, state=state, time=NS(monotonic=lambda: 100),
                 disp_state=display, pressing=pressing, long_press_fired=False,
                 press_start=1, LONG_PRESS_SEC=2, sw=800, sh=480, running=True,
-                save_ui_state=None, random_bright_color=lambda: (1, 2, 3), saved=saved)
+                save_ui_state=None, random_bright_color=lambda: (1, 2, 3), saved=saved,
+                presence=PresenceController(100),
+                camera_check=NS(poll=lambda: None, request=lambda: False))
 
 
 @pytest.mark.parametrize('down,up', [(2, 3), (4, 5)])

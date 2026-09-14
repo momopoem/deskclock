@@ -22,10 +22,29 @@ from config import (
     PIR_DIM_TO,
     PIR_NO_MOTION_SEC,
 )
-from services.brightness_controller import compute_desired_brightness
+from services.brightness_controller import compute_desired_brightness, BrightnessController
 
 
 class BrightnessTimeoutTests(unittest.TestCase):
+    def test_face_presence_keeps_full_brightness_without_raw_pir(self):
+        self.assertEqual(compute_desired_brightness(1000, {
+            'display_presence_hold': True, 'pir_mono': 0,
+            'lux': 0, 'lux_mono': 1000,
+        }), 1.0)
+
+    def test_rejected_raw_pir_does_not_override_display_activity(self):
+        shared = {'activity_mono': 1000, 'pir_mono': 1000,
+                  'display_activity_mono': 0, 'display_pir_mono': 0,
+                  'lux': 0, 'lux_mono': 1000}
+        self.assertEqual(compute_desired_brightness(1000, shared), 0.0)
+
+    def test_default_brightness_logging_is_disabled(self):
+        controller = BrightnessController()
+        self.assertIsNone(controller._on_transition)
+        controller.update(now_mono=1000, shared={'pir_mono': 0}, disp_state='DIM')
+        controller.update(now_mono=1001, shared={'pir_mono': 0}, disp_state='DIM')
+        self.assertLess(controller.brightness_cur, 1.0)
+
     def test_configured_no_motion_timeouts(self) -> None:
         self.assertEqual(PIR_NO_MOTION_SEC, 3 * 60)
         self.assertEqual(DIM_AFTER_SEC, 3 * 60)

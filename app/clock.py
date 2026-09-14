@@ -44,6 +44,7 @@ from typing import Callable, Optional, Any
 from datetime import datetime
 import random
 import subprocess
+import sys
 import hmac
 import hashlib
 import base64
@@ -84,6 +85,7 @@ from utils.common import (
     _is_fresh,
 )
 from services.ntp_monitor import ntp_monitor_update
+from services.presence_controller import PresenceController, PresenceSettings, CameraCheckWorker
 from services.sensor_service import (
     _bh1750_read_lux,
     _sht20_read_temp_hum_via_i2c,
@@ -518,7 +520,7 @@ def switchbot_light_off(token: str, secret: str, light_device_id: str) -> dict:
 # =========================
 # Face recognition (call external script using system python)
 # =========================
-FACE_RECOG_PY = "/usr/bin/python3"
+FACE_RECOG_PY = sys.executable
 FACE_RECOG_SCRIPT = os.path.expanduser("~/deskclock/face/recognize_once.py")
 FACE_RECOG_TIMEOUT_SEC = 12
 
@@ -539,15 +541,19 @@ def run_face_recognize_once() -> dict:
             text=True,
             timeout=FACE_RECOG_TIMEOUT_SEC,
             check=False,
+            env={**os.environ, "DESKCLOCK_FACE_SAVE_DEBUG": "0"},
         )
         out = (p.stdout or "").strip()
         # Some OpenCV warnings may be printed to stdout; try to extract last JSON object.
-        jtxt = out
-        if "{" in out and "}" in out:
-            jtxt = out[out.rfind("{"): out.rfind("}") + 1]
-        data = json.loads(jtxt)
+        data = None
+        for line in reversed(out.splitlines()):
+            try:
+                data = json.loads(line)
+                break
+            except json.JSONDecodeError:
+                continue
         if not isinstance(data, dict):
-            return {"ok": False, "error": "bad_json_type", "raw": jtxt}
+            return {"ok": False, "error": "bad_json_type"}
         return data
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "timeout"}
@@ -721,9 +727,30 @@ def main():
     brightness_cur = brightness_ctrl.brightness_cur
     brightness_target = brightness_ctrl.brightness_target
 
+    presence = PresenceController(time.monotonic(), PresenceSettings(
+        pir_confirm_sec=DISPLAY_PIR_CONFIRM_SEC,
+        motion_hold_sec=DISPLAY_MOTION_HOLD_SEC,
+        face_hold_sec=DISPLAY_FACE_HOLD_SEC,
+        check_idle_sec=DISPLAY_FACE_CHECK_IDLE_SEC,
+        check_interval_sec=DISPLAY_FACE_CHECK_INTERVAL_SEC,
+        misses_required=DISPLAY_FACE_MISSES_REQUIRED,
+        failure_grace_sec=DISPLAY_CAMERA_FAILURE_GRACE_SEC,
+    ), log=lambda message: _log_dpm_event(f"[PRESENCE] {message}"))
+    camera_check = CameraCheckWorker(run_face_recognize_once)
+    state["display_activity_mono"] = presence.last_motion
+    _log_dpm_event(f"[PRESENCE] settings={presence.settings}")
+
     while running:
         color_changed = False
         now_mono = time.monotonic()
+        presence.update_pir(now_mono, bool(state.pir_value) and not state.pir_err
+                            and now_mono - state.pir_mono < 2.0)
+        camera_result = camera_check.poll()
+        if camera_result is not None:
+            presence.record_camera(now_mono, camera_result)
+        if presence.check_due(now_mono, disp_state):
+            if camera_check.request():
+                presence.next_check = now_mono + DISPLAY_FACE_CHECK_INTERVAL_SEC
 
         # Discard gestures while HDMI is off, including a press begun before
         # power-off. A release after waking must not complete that old gesture.
@@ -763,12 +790,16 @@ def main():
 
             if e.type == pygame.MOUSEBUTTONDOWN or e.type == pygame.FINGERDOWN:
                 state.activity_mono = now_mono
+                state["display_activity_mono"] = now_mono
+                presence.touch(now_mono)
                 pressing = True
                 press_start = now_mono
                 long_press_fired = False
 
             if e.type == pygame.MOUSEBUTTONUP or e.type == pygame.FINGERUP:
                 state.activity_mono = now_mono
+                state["display_activity_mono"] = now_mono
+                presence.touch(now_mono)
                 if pressing:
                     pressing = False
                     if not long_press_fired:
@@ -1002,13 +1033,11 @@ def main():
                                     f"baseline_lux={state.light.on_baseline_lux!r} "
                                     f"attempts={state.light.on_attempts}"
                                 )
-                                # Face recognition can block for up to 12 seconds, so it runs
-                                # only after retransmission and physical light verification finish.
+                                # Share the asynchronous camera worker with display presence.
+                                # Camera results do not extend the room-light timeout.
                                 if state.light.face_recognition_pending:
                                     state.light.face_recognition_pending = False
-                                    fr = run_face_recognize_once()
-                                    if isinstance(fr, dict) and fr.get("ok") and fr.get("is_authorized_user") is True:
-                                        state.light.authorized_user_until_mono = now_mono + AUTHORIZED_USER_LIGHT_GRACE_SEC
+                                    camera_check.request()
                             elif state.light.on_attempts < LIGHT_ON_MAX_ATTEMPTS:
                                 r = switchbot_light_on(sb_token, sb_secret, sb_light_id)
                                 state.light.last_cmd_mono = now_mono
@@ -1056,9 +1085,12 @@ def main():
                             state.light.authorized_user_until_mono = 0.0
 
             # StateMachine: decide next display state and HDMI command (fully compatible)
+            state["display_presence_hold"] = presence.hold(time.monotonic())
+            state["display_pir_mono"] = presence.last_motion
+            display_motion = now_mono if state["display_presence_hold"] else presence.last_motion
             decision = dpm.step(
                 now_mono=now_mono,
-                pir_mono=pir_mono,
+                pir_mono=display_motion,
                 brightness_target=brightness_target,
                 brightness_cur=brightness_cur,
             )
@@ -1278,6 +1310,7 @@ def main():
         clock.tick(30)
 
     stop_event.set()
+    camera_check.close()
     pygame.quit()
 
 if __name__ == "__main__":

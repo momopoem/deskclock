@@ -39,6 +39,7 @@ DEBUG_DIR = PRIVATE_DIR
 DEBUG_FRAME = os.path.join(DEBUG_DIR, "debug_frame.jpg")
 DEBUG_GRAY  = os.path.join(DEBUG_DIR, "debug_gray.jpg")
 DEBUG_FACE  = os.path.join(DEBUG_DIR, "debug_face.jpg")
+SAVE_DEBUG = os.environ.get("DESKCLOCK_FACE_SAVE_DEBUG", "1") != "0"
 
 
 def load_cascades():
@@ -179,10 +180,13 @@ def recognize_once(model, cascades):
 
     cap.release()
 
+    if last_frame is None:
+        return {"ok": False, "error": "camera_read_failed"}
+
     # デバッグ（最後のフレームは必ず残す）
-    if last_frame is not None:
+    if SAVE_DEBUG and last_frame is not None:
         cv2.imwrite(DEBUG_FRAME, last_frame)
-    if last_gray is not None:
+    if SAVE_DEBUG and last_gray is not None:
         cv2.imwrite(DEBUG_GRAY, last_gray)
 
     if best is None:
@@ -200,9 +204,10 @@ def recognize_once(model, cascades):
         }
 
     # ベストのデバッグ保存
-    cv2.imwrite(DEBUG_FRAME, best["frame"])
-    cv2.imwrite(DEBUG_GRAY, best["gray"])
-    cv2.imwrite(DEBUG_FACE, best["face_img"])
+    if SAVE_DEBUG:
+        cv2.imwrite(DEBUG_FRAME, best["frame"])
+        cv2.imwrite(DEBUG_GRAY, best["gray"])
+        cv2.imwrite(DEBUG_FACE, best["face_img"])
 
     is_authorized_user = (best["label"] == 0 and best["confidence"] < THRESHOLD)
 
