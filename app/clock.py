@@ -725,6 +725,12 @@ def main():
         color_changed = False
         now_mono = time.monotonic()
 
+        # Discard gestures while HDMI is off, including a press begun before
+        # power-off. A release after waking must not complete that old gesture.
+        if disp_state == "OFF":
+            pressing = False
+            long_press_fired = False
+            press_start = 0.0
 
         # Long-press: reset color to white (works for both mouse and touchscreen)
         if pressing and (not long_press_fired) and ((now_mono - press_start) >= LONG_PRESS_SEC):
@@ -748,6 +754,12 @@ def main():
         for e in pygame.event.get():
             if e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
                 running = False
+
+            if disp_state == "OFF" and e.type in (
+                pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP,
+                pygame.FINGERDOWN, pygame.FINGERUP,
+            ):
+                continue
 
             if e.type == pygame.MOUSEBUTTONDOWN or e.type == pygame.FINGERDOWN:
                 state.activity_mono = now_mono
