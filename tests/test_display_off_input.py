@@ -7,6 +7,7 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parents[1] / 'app'))
 from services.presence_controller import PresenceController
+from services.light_controller import LightMotionGate
 
 
 class State(NS):
@@ -41,6 +42,7 @@ def context(events, display='OFF', pressing=False):
                 press_start=1, LONG_PRESS_SEC=2, sw=800, sh=480, running=True,
                 save_ui_state=None, random_bright_color=lambda: (1, 2, 3), saved=saved,
                 presence=PresenceController(100),
+                light_motion=LightMotionGate(),
                 camera_check=NS(poll=lambda: None, request=lambda: False))
 
 

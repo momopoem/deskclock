@@ -106,6 +106,7 @@ from services.weather_service import (
 )
 from services.brightness_controller import _apply_brightness
 from services.light_controller import (
+    LightMotionGate,
     arm_light_off,
     light_is_confirmed,
     light_off_due,
@@ -739,10 +740,22 @@ def main():
     camera_check = CameraCheckWorker(run_face_recognize_once)
     state["display_activity_mono"] = presence.last_motion
     _log_dpm_event(f"[PRESENCE] settings={presence.settings}")
+    light_motion = LightMotionGate(
+        sustained_sec=LIGHT_PIR_SUSTAINED_SEC,
+        pulse_sec=LIGHT_PIR_PULSE_SEC,
+        window_sec=LIGHT_PIR_REPEAT_WINDOW_SEC,
+        log=_log_light_event,
+    )
+    _log_light_event(f"motion_filter sustained_sec={LIGHT_PIR_SUSTAINED_SEC} "
+                     f"pulse_sec={LIGHT_PIR_PULSE_SEC} repeat_window_sec={LIGHT_PIR_REPEAT_WINDOW_SEC}")
 
     while running:
         color_changed = False
         now_mono = time.monotonic()
+        light_motion_active = light_motion.update(
+            now_mono, bool(state.pir_value),
+            valid=not state.pir_err and (not state.pir_value or now_mono-state.pir_mono < 2.0),
+        )
         presence.update_pir(now_mono, bool(state.pir_value) and not state.pir_err
                             and now_mono - state.pir_mono < 2.0)
         camera_result = camera_check.poll()
@@ -948,14 +961,14 @@ def main():
 
             state.light.enabled = bool(sb_token and sb_secret and sb_light_id)
 
-            # --- Light control trigger: when dark & DIM/OFF and PIR rising edge ---
-            pir_v = int(state.pir_value or 0)
+            # Only qualified PIR activity can start or rearm room lighting.
+            pir_v = int(light_motion_active)
             pir_rise = (pir_v == 1 and state.light.prev_pir_value == 0)
             state.light.prev_pir_value = pir_v
 
             # --- Light control (SwitchBot + face recognition) ---
             # Independent from display PM:
-            # - Any motion => light ON immediately and (re)arm a fixed 5-minute OFF timer.
+            # - Qualified motion => light ON and (re)arm a fixed 5-minute OFF timer.
             # - If no motion continues and the timer expires => light OFF.
             # - On PIR rising edge (and only when dark / DIM / OFF), we run face recognition once.
             #   Recognition does not extend the no-motion OFF timer.
@@ -968,7 +981,7 @@ def main():
                     pir_v == 1
                     or (
                         state.light.on_verify_active
-                        and t_no_motion <= LIGHT_ON_MOTION_HOLD_SEC
+                        and light_motion.age(now_mono) <= LIGHT_ON_MOTION_HOLD_SEC
                     )
                 )
                 if light_cycle_motion_active:
@@ -1060,7 +1073,7 @@ def main():
                                 state.light.on_failed_latched = True
                                 state.light.face_recognition_pending = False
 
-                    # Every detection restarts the fixed no-motion deadline.
+                    # Only qualified detections restart the no-motion deadline.
                     # Identity recognition must not keep an empty room lit.
                     if pir_v == 1:
                         state.light.deadline_mono = arm_light_off(now_mono, LIGHT_OFF_TIMEOUT_SEC)

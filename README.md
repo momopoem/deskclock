@@ -171,7 +171,13 @@ python -m compileall -q app tests
 数値は `app/config.py` の `DISPLAY_PIR_CONFIRM_SEC` と `DISPLAY_*HOLD_SEC`、
 `DISPLAY_FACE_*`、`DISPLAY_CAMERA_FAILURE_GRACE_SEC` で調整できます。
 
-この制御は画面専用で、室内照明の人感タイマーは独立しています。
+この在席保持は画面専用で、室内照明の人感タイマーは独立しています。
+室内照明は人感信号が2秒連続、または10秒以内に0.4秒以上の信号が2回あった場合に
+点灯します。条件成立後はカメラを待たず指令を送ります。単発の短い信号では点灯せず、
+消灯までの5分タイマーも延長しません。`LIGHT_PIR_SUSTAINED_SEC`、
+`LIGHT_PIR_PULSE_SEC`、`LIGHT_PIR_REPEAT_WINDOW_SEC` で調整できます。
+SR501のデジタル出力だけでは熱源や動きの大きさを判別できません。
+`[LGT] motion=accepted/ignored` に採用・除外理由を記録します。
 消灯中のタッチ入力は引き続き無視します。定期カメラ確認ではデバッグ画像を保存しません。
 `log/clock.log` には `[PRESENCE]` として人感入力の変化・継続時間、採用した検知、
 カメラ確認結果、保持の開始・終了を記録します。フレームごとの `[BRT]` ログは停止し、

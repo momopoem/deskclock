@@ -113,6 +113,9 @@ HDMI_OFF_CMD = ["sudo", "-n", "/usr/local/bin/hdmi_off.sh"]
 HDMI_ON_CMD = ["sudo", "-n", "/usr/local/bin/hdmi_on.sh"]
 
 LIGHT_OFF_TIMEOUT_SEC = 300
+LIGHT_PIR_SUSTAINED_SEC = 2.0
+LIGHT_PIR_PULSE_SEC = 0.4
+LIGHT_PIR_REPEAT_WINDOW_SEC = 10.0
 PIR_NO_MOTION_SEC = 180
 PIR_DIM_TO = 0.20
 PIR_FADE_SEC = 10.0
