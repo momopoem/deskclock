@@ -684,29 +684,14 @@ def main():
     dpm = DisplayPowerStateMachine()  # fully compatible with v1.1.2 rules
     disp_state = dpm.disp_state       # "ON" | "DIM" | "OFF" (for legacy references)
 
-    # Light control (SwitchBot + face recognition)
+    # SwitchBot availability.  Session timing and delivery state are created
+    # below; do not recreate the removed independent light-off timer here.
     sb_token = os.environ.get("SWITCHBOT_TOKEN")
     sb_secret = os.environ.get("SWITCHBOT_SECRET")
     sb_light_id = os.environ.get("SWITCHBOT_lightDeviceId")
 
     state.light.enabled = bool(sb_token and sb_secret and sb_light_id)
-    state.light.is_on = False  # our internal state (best-effort)
-    state.light.last_cmd_mono = 0.0
-    state.light.probe_until_mono = 0.0
-    state.light.authorized_user_until_mono = 0.0
-    state.light.deadline_mono = (
-        arm_light_off(time.monotonic(), LIGHT_OFF_TIMEOUT_SEC)
-        if state.light.enabled
-        else 0.0
-    )
-    state.light.prev_pir_value = int(state.pir_value or 0)
-    state.light.on_verify_active = False
-    state.light.on_baseline_lux = None
-    state.light.on_next_action_mono = 0.0
-    state.light.on_next_action = ""
-    state.light.on_attempts = 0
-    state.light.on_failed_latched = False
-    state.light.face_recognition_pending = False
+    state.light.is_on = False  # best-effort result of the current session
 
     stop_event = threading.Event()
     service_deps = build_service_dependencies(state=state, stop_event=stop_event)
