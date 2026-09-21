@@ -37,15 +37,20 @@ class PresenceController:
         if not high:
             self.high_since = None
             self.accepted = False
-            return
+            return False
         if self.high_since is None:
             self.high_since = now
         if now - self.high_since >= self.settings.pir_confirm_sec:
             if not self.accepted:
                 self.log('motion=accepted')
                 self.misses = 0
+                newly_accepted = True
+            else:
+                newly_accepted = False
             self.accepted = True
             self.last_motion = now
+            return newly_accepted
+        return False
 
     def touch(self, now):
         self.last_motion = now
@@ -64,6 +69,8 @@ class PresenceController:
             # An unavailable camera is not evidence that the room is empty.
             # Nevertheless, the bounded grace prevents indefinite screen-on.
             self.log(f'camera=error error={result.get("error", "invalid_result")}')
+        return bool(result.get('ok') and result.get('found_face')
+                    and result.get('is_authorized_user'))
 
     def check_due(self, now, display_state):
         return (display_state != 'OFF' and now >= self.next_check
@@ -89,9 +96,13 @@ class CameraCheckWorker:
         self.recognize = recognize
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='presence-camera')
         self.future = None
+        self.recheck_requested = False
 
-    def request(self):
+    def request(self, *, requeue: bool = False):
         if self.future is not None:
+            # A new PIR session must receive its own recognition result.  Keep
+            # one follow-up request rather than silently discarding it.
+            self.recheck_requested = self.recheck_requested or requeue
             return False
         self.future = self.executor.submit(self.recognize)
         return True
@@ -102,9 +113,13 @@ class CameraCheckWorker:
         future, self.future = self.future, None
         try:
             result = future.result()
-            return result if isinstance(result, dict) else {'ok': False, 'error': 'invalid_result'}
+            result = result if isinstance(result, dict) else {'ok': False, 'error': 'invalid_result'}
         except Exception as exc:
-            return {'ok': False, 'error': type(exc).__name__}
+            result = {'ok': False, 'error': type(exc).__name__}
+        if self.recheck_requested:
+            self.recheck_requested = False
+            self.request()
+        return result
 
     def close(self):
         self.executor.shutdown(wait=False, cancel_futures=True)

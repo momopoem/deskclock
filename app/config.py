@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 
 __product__ = "Desk Side Clock"
-__version__ = "v2.3.3"
+__version__ = "v2.3.8"
 __status__ = "release"
 APP_VERSION = __version__
 
@@ -124,6 +124,7 @@ PIR_WAKE_OVERRIDE_SEC = 2.0
 DISPLAY_PIR_CONFIRM_SEC = 0.6
 DISPLAY_MOTION_HOLD_SEC = 300.0
 DISPLAY_FACE_HOLD_SEC = 600.0
+DISPLAY_FADE_SEC = 30.0
 DISPLAY_FACE_CHECK_IDLE_SEC = 30.0
 DISPLAY_FACE_CHECK_INTERVAL_SEC = 60.0
 DISPLAY_FACE_MISSES_REQUIRED = 3

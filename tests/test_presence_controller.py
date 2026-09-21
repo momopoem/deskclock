@@ -87,6 +87,30 @@ def test_camera_worker_is_nonblocking_and_does_not_queue_duplicates():
         worker.close()
 
 
+def test_requeued_camera_check_runs_after_current_check_finishes():
+    calls = []
+    entered, release = threading.Event(), threading.Event()
+    def recognize():
+        calls.append(1)
+        entered.set()
+        release.wait(2)
+        return {'ok': True, 'found_face': True, 'is_authorized_user': True}
+    worker = CameraCheckWorker(recognize)
+    try:
+        assert worker.request()
+        assert entered.wait(1)
+        assert not worker.request(requeue=True)
+        release.set()
+        worker.future.result(timeout=1)
+        assert worker.poll()['is_authorized_user']
+        worker.future.result(timeout=1)
+        assert worker.poll()['is_authorized_user']
+        assert len(calls) == 2
+    finally:
+        release.set()
+        worker.close()
+
+
 def test_camera_exception_becomes_diagnostic_result():
     def fail():
         raise RuntimeError('camera unavailable')
