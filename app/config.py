@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 
 __product__ = "Desk Side Clock"
-__version__ = "v2.3.8"
+__version__ = "v2.3.9"
 __status__ = "release"
 APP_VERSION = __version__
 
