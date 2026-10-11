@@ -32,6 +32,13 @@ MIN_W = 80
 MIN_H = 80
 MIN_AREA = 8000
 
+# Haar の単発検出は棚の模様などにも反応し得る。LBPH は顔検出器ではないため、
+# LBPH に渡す前に、二つの独立した Haar が同じ位置を顔と判断した候補だけを使う。
+DETECT_MIN_NEIGHBORS = 5
+MIN_CASCADE_AGREEMENT = 2
+MIN_FACE_IOU = 0.35
+
+
 # ★重要：切り出しを「縮める」。0.18 = 矩形の左右上下を18%ずつ内側へ
 INSET = 0.18
 
@@ -42,13 +49,48 @@ DEBUG_FACE  = os.path.join(DEBUG_DIR, "debug_face.jpg")
 SAVE_DEBUG = os.environ.get("DESKCLOCK_FACE_SAVE_DEBUG", "1") != "0"
 
 
-def load_cascades():
+def load_cascades(paths):
     out = []
-    for p in HAAR_LIST:
+    for p in paths:
         cc = cv2.CascadeClassifier(p)
         if not cc.empty():
             out.append((p, cc))
     return out
+
+
+def rect_iou(a, b):
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    x0, y0 = max(ax, bx), max(ay, by)
+    x1, y1 = min(ax + aw, bx + bw), min(ay + ah, by + bh)
+    inter = max(0, x1 - x0) * max(0, y1 - y0)
+    union = aw * ah + bw * bh - inter
+    return (inter / union) if union else 0.0
+
+
+def validated_faces(gray, face_cascades):
+    """Face rectangles backed by agreement between independent face cascades."""
+    detections = []
+    raw_count = 0
+    for haar_path, cc in face_cascades:
+        faces = cc.detectMultiScale(gray, scaleFactor=1.05,
+                                    minNeighbors=DETECT_MIN_NEIGHBORS,
+                                    minSize=(40, 40))
+        raw_count += int(len(faces))
+        for x, y, w, h, _area in filter_faces(faces):
+            detections.append((haar_path, (x, y, w, h)))
+
+    approved = []
+    for haar_path, rect in detections:
+        agreeing = {haar_path}
+        for other_path, other_rect in detections:
+            if rect_iou(rect, other_rect) >= MIN_FACE_IOU:
+                agreeing.add(other_path)
+        if len(agreeing) < MIN_CASCADE_AGREEMENT:
+            continue
+        x, y, w, h = rect
+        approved.append((x, y, w, h, w * h, len(agreeing)))
+    return approved, raw_count
 
 
 def filter_faces(faces):
@@ -116,7 +158,7 @@ def open_camera():
     return None, "failed"
 
 
-def recognize_once(model, cascades):
+def recognize_once(model, face_cascades):
     cap, backend = open_camera()
     if cap is None:
         return {"error": "camera_open_failed"}
@@ -143,20 +185,10 @@ def recognize_once(model, cascades):
         gray = cv2.equalizeHist(gray)
         last_gray = gray.copy()
 
-        for haar_path, cc in cascades:
-            faces = cc.detectMultiScale(
-                gray,
-                scaleFactor=1.05,
-                minNeighbors=2,
-                minSize=(40, 40)
-            )
-            raw_n = int(len(faces))
-            cand = filter_faces(faces)
-            if not cand:
-                continue
-
-            # ★候補ごとにLBPHのconfidenceを出して一番小さいものを採用
-            for (x, y, w, h, area) in cand:
+        cand, raw_n = validated_faces(gray, face_cascades)
+        if cand:
+            # 顔構造を通った候補だけをLBPHへ渡し、一番小さい距離を採用する。
+            for (x, y, w, h, area, cascade_agreement) in cand:
                 face_img, rect_tight = crop_face_tight(gray, (x, y, w, h))
                 label, conf = model.predict(face_img)
 
@@ -166,7 +198,7 @@ def recognize_once(model, cascades):
                     "area": int(area),
                     "rect_raw": [x, y, w, h],
                     "rect_tight": rect_tight,
-                    "haar_path": haar_path,
+                    "cascade_agreement": cascade_agreement,
                     "faces_raw": raw_n,
                     "faces_after_filter": len(cand),
                     "frame": frame.copy(),
@@ -196,7 +228,7 @@ def recognize_once(model, cascades):
             "frames_tried": frames_tried,
             "seconds": round(time.monotonic() - start, 3),
             "backend": backend,
-            "haar_tried": [p for p, _ in cascades],
+            "haar_tried": [p for p, _ in face_cascades],
             "filter": {"min_w": MIN_W, "min_h": MIN_H, "min_area": MIN_AREA},
             "inset": INSET,
             "debug_frame": DEBUG_FRAME,
@@ -221,7 +253,7 @@ def recognize_once(model, cascades):
         "rect": best["rect_tight"],      # タイト矩形（インセット後）
         "rect_raw": best["rect_raw"],    # 元の検出矩形
         "area": best["area"],
-        "haar": best["haar_path"],
+        "cascade_agreement": best["cascade_agreement"],
         "frames_tried": frames_tried,
         "seconds": round(time.monotonic() - start, 3),
         "backend": backend,
@@ -238,8 +270,8 @@ if not os.path.exists(MODEL_PATH):
     print(json.dumps({"ok": False, "error": "model_missing", "model": MODEL_PATH}))
     sys.exit(2)
 
-cascades = load_cascades()
-if not cascades:
+cascades = load_cascades(HAAR_LIST)
+if len(cascades) < MIN_CASCADE_AGREEMENT:
     print(json.dumps({"ok": False, "error": "haar_load_failed", "haar_list": HAAR_LIST}))
     sys.exit(4)
 
