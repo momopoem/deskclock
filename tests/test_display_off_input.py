@@ -19,14 +19,15 @@ def event_loop():
     tree = ast.parse((Path(__file__).parents[1] / 'app/clock.py').read_text(encoding='utf-8'))
     loop = next(n for n in ast.walk(tree) if isinstance(n, ast.While)
                 and isinstance(n.test, ast.Name) and n.test.id == 'running')
-    body = []
-    for node in loop.body:
-        if isinstance(node, ast.Assign) and any(isinstance(x, ast.Call)
-                and isinstance(x.func, ast.Name) and x.func.id == 'ntp_monitor_update'
-                for x in ast.walk(node)):
-            break
-        body.append(node)
-    return compile(ast.Module(body=body, type_ignores=[]), 'clock-input', 'exec')
+    # Test only the input section.  Presence/session calculation deliberately
+    # precedes this section and needs real controller dependencies.
+    start = next(i for i, node in enumerate(loop.body)
+                 if isinstance(node, ast.If) and ast.unparse(node.test) == "disp_state == 'OFF'")
+    end = next(i for i, node in enumerate(loop.body[start:], start)
+               if isinstance(node, ast.Assign) and any(
+                   isinstance(x, ast.Call) and isinstance(x.func, ast.Name)
+                   and x.func.id == 'ntp_monitor_update' for x in ast.walk(node)))
+    return compile(ast.Module(body=loop.body[start:end], type_ignores=[]), 'clock-input', 'exec')
 
 
 def context(events, display='OFF', pressing=False):
@@ -41,9 +42,7 @@ def context(events, display='OFF', pressing=False):
                 disp_state=display, pressing=pressing, long_press_fired=False,
                 press_start=1, LONG_PRESS_SEC=2, sw=800, sh=480, running=True,
                 save_ui_state=None, random_bright_color=lambda: (1, 2, 3), saved=saved,
-                presence=PresenceController(100),
-                light_motion=LightMotionGate(),
-                camera_check=NS(poll=lambda: None, request=lambda: False))
+                presence=PresenceController(100))
 
 
 @pytest.mark.parametrize('down,up', [(2, 3), (4, 5)])
