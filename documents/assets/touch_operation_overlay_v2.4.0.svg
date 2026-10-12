@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1200" viewBox="0 0 1920 1200">
   <g fill-opacity="0.18" stroke-width="8">
-    <rect x="352" y="208" width="1160" height="440" rx="26" fill="#00bcd4" stroke="#00acc1"/>
+    <rect x="381" y="294" width="621" height="330" rx="26" fill="#00bcd4" stroke="#00acc1"/>
     <rect x="1532" y="166" width="324" height="252" rx="22" fill="#ff9800" stroke="#f57c00"/>
     <rect x="50" y="738" width="1054" height="166" rx="22" fill="#22c55e" stroke="#16a34a"/>
     <rect x="1106" y="738" width="794" height="166" rx="22" fill="#a855f7" stroke="#7e22ce"/>
@@ -9,7 +9,7 @@
     <rect x="1106" y="904" width="794" height="178" rx="22" fill="#ef4444" stroke="#dc2626"/>
   </g>
   <g font-family="Arial, Meiryo, sans-serif" font-size="54" font-weight="700" text-anchor="middle" fill="#1e3a5f" stroke="#ffffff" stroke-width="10" paint-order="stroke">
-    <text x="388" y="261">1</text><text x="1568" y="219">2</text><text x="86" y="791">3</text>
+    <text x="417" y="347">1</text><text x="1568" y="219">2</text><text x="86" y="791">3</text>
     <text x="1142" y="791">4</text><text x="86" y="957">5</text><text x="596" y="957">6</text><text x="1142" y="957">7</text>
   </g>
 </svg>
