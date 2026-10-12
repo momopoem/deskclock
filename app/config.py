@@ -150,7 +150,8 @@ NTP_RETRY_DELAY_SEC = 60.0 * 60.0
 NTP_DEGRADED_CHECK_SEC = 5.0 * 60.0
 
 SWITCHBOT_REFRESH_SEC = 60
-INDOOR_SOURCES = ["SHT20", "SWITCHBOT", "BME280"]
+# Keep the physical I2C sensors adjacent to make the on-screen cycle clear.
+INDOOR_SOURCES = ["SHT20", "AHT21", "SWITCHBOT", "BME280"]
 OUTDOOR_SOURCES = ["SWITCHBOT", "OPEN_METEO"]
 STATE_DIR = os.path.expanduser("~/.config/deskclock")
 STATE_PATH = os.path.join(STATE_DIR, "state.json")

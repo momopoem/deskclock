@@ -853,7 +853,7 @@ def main():
                             continue
 
 
-                        # 1) Indoor touch -> cycle SHT20 → SWITCHBOT → BME280 (skip invalid)
+                        # 1) Indoor touch -> cycle SHT20 → AHT21 → SWITCHBOT → BME280 (skip invalid)
                         if _pt_in_rect(pt, state.touch_rects_screen.get("indoor")):
                             state.indoor_mode = next_valid_source(
                                 state.indoor_mode,
