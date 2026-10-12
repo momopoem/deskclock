@@ -10,7 +10,7 @@ from typing import Callable
 import requests
 
 from config import *
-from services.sensor_service import (
+from sensors import (
     fetch_aht21_loop,
     fetch_bh1750_loop,
     fetch_bme280_loop,

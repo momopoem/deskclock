@@ -87,7 +87,7 @@ from utils.common import (
 from services.ntp_monitor import ntp_monitor_update
 from services.presence_controller import PresenceController, PresenceSettings, CameraCheckWorker
 from services.display_light_controller import DisplayLightController, LightOnDelivery
-from services.sensor_service import (
+from sensors import (
     _bh1750_read_lux,
     _sht20_read_temp_hum_via_i2c,
     _aht21_read_temp_hum_via_i2c,
