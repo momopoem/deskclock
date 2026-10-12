@@ -17,15 +17,15 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.3.10**
+- バージョン: **v2.4.0**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
-詳細資料はv2.3.10仕様です。
+詳細資料はv2.4.0仕様です。
 
-- `documents/DeskSideClock_基本設計書_v2.3.10.docx`
-- `documents/DeskSideClock_ソフトウェア仕様書_v2.3.10.docx`
+- `documents/DeskSideClock_基本設計書_v2.4.0.docx`
+- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.0.docx`
 
 物理センサーの個別・一括診断と自動テストはソースに同梱しています。手順は[センサー診断ガイド](app/test/README.md)を参照してください。
 
