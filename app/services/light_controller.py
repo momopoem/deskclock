@@ -1,6 +1,55 @@
 # Copyright 2026 (C) Hiroshi Ishikawa. powered by momopoem inc.
 from __future__ import annotations
 
+from collections import deque
+
+
+class LightMotionGate:
+    """Qualify digital PIR activity; this cannot measure physical motion size."""
+    def __init__(self, sustained_sec=2.0, pulse_sec=0.4, window_sec=10.0,
+                 log=lambda message: None):
+        self.sustained_sec = sustained_sec
+        self.pulse_sec = pulse_sec
+        self.window_sec = window_sec
+        self.log = log
+        self.high_since = None
+        self.counted = False
+        self.accepted = False
+        self.hits = deque()
+        self.last_motion = None
+
+    def update(self, now, high, valid=True):
+        if not valid:
+            self.hits.clear()
+            high = False
+        while self.hits and now - self.hits[0] > self.window_sec:
+            self.hits.popleft()
+        if not high:
+            if self.high_since is not None and not self.accepted:
+                self.log(f'motion=ignored high_sec={now-self.high_since:.2f}')
+            self.high_since = None
+            self.counted = False
+            self.accepted = False
+            return False
+        if self.high_since is None:
+            self.high_since = now
+        duration = now - self.high_since
+        if not self.counted and duration >= self.pulse_sec:
+            self.hits.append(now)
+            self.counted = True
+        if not self.accepted:
+            reason = ('sustained' if duration >= self.sustained_sec else
+                      'repeated' if len(self.hits) >= 2 else None)
+            if reason:
+                self.accepted = True
+                self.log(f'motion=accepted reason={reason} high_sec={duration:.2f}')
+        if self.accepted:
+            self.last_motion = now
+        return self.accepted
+
+    def age(self, now):
+        return float('inf') if self.last_motion is None else max(0.0, now-self.last_motion)
+
 
 def arm_light_off(now_mono: float, timeout_sec: float) -> float:
     """Return the absolute no-motion deadline for switching the light off."""

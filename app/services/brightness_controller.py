@@ -59,12 +59,14 @@ def compute_desired_brightness(now_mono: float, shared: dict) -> float:
       - Fade down is handled outside (PIR_FADE_SEC/BH1750_FADE_SEC ~10s).
     """
     # 0) Immediate wake by recent activity (touch/key/motion/lux wake)
-    activity_mono = shared.get("activity_mono", None)
+    if shared.get("display_presence_hold", False):
+        return 1.0
+    activity_mono = shared.get("display_activity_mono", shared.get("activity_mono", None))
     if isinstance(activity_mono, (int, float)) and ((now_mono - float(activity_mono)) <= PIR_WAKE_OVERRIDE_SEC):
         return 1.0
 
     # 1) Read PIR (last motion time)
-    pir_mono = shared.get("pir_mono", None)
+    pir_mono = shared.get("display_pir_mono", shared.get("pir_mono", None))
     pir_recent = False
     no_motion = False
     if PIR_ENABLE and isinstance(pir_mono, (int, float)):
@@ -93,6 +95,8 @@ def compute_desired_brightness(now_mono: float, shared: dict) -> float:
         lux_wake_high = bool(shared.get("_lux_wake_high", False))
         if lx >= BH1750_WAKE_LX and not lux_wake_high:
             shared["activity_mono"] = now_mono
+            if shared.get("display_activity_mono") is not None:
+                shared["display_activity_mono"] = now_mono
             shared["_lux_wake_high"] = True
             shared["_lux_state"] = "light"
             return 1.0
@@ -169,7 +173,8 @@ class BrightnessController:
 
     def __init__(self) -> None:
         self.state = BrightnessState()
-        self._on_transition: Optional[Callable[..., None]] = self._default_on_transition
+        # DPM state transitions remain logged; per-frame brightness logs are off.
+        self._on_transition: Optional[Callable[..., None]] = None
 
     def set_on_transition(self, cb: Optional[Callable[..., None]]) -> None:
         """Set a transition hook.

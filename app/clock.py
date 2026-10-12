@@ -44,6 +44,7 @@ from typing import Callable, Optional, Any
 from datetime import datetime
 import random
 import subprocess
+import sys
 import hmac
 import hashlib
 import base64
@@ -84,7 +85,9 @@ from utils.common import (
     _is_fresh,
 )
 from services.ntp_monitor import ntp_monitor_update
-from services.sensor_service import (
+from services.presence_controller import PresenceController, PresenceSettings, CameraCheckWorker
+from services.display_light_controller import DisplayLightController, LightOnDelivery
+from sensors import (
     _bh1750_read_lux,
     _sht20_read_temp_hum_via_i2c,
     _aht21_read_temp_hum_via_i2c,
@@ -104,9 +107,7 @@ from services.weather_service import (
 )
 from services.brightness_controller import _apply_brightness
 from services.light_controller import (
-    arm_light_off,
     light_is_confirmed,
-    light_off_due,
     lux_sample_is_fresh,
     switchbot_command_payload,
     switchbot_command_succeeded,
@@ -518,7 +519,7 @@ def switchbot_light_off(token: str, secret: str, light_device_id: str) -> dict:
 # =========================
 # Face recognition (call external script using system python)
 # =========================
-FACE_RECOG_PY = "/usr/bin/python3"
+FACE_RECOG_PY = sys.executable
 FACE_RECOG_SCRIPT = os.path.expanduser("~/deskclock/face/recognize_once.py")
 FACE_RECOG_TIMEOUT_SEC = 12
 
@@ -539,15 +540,19 @@ def run_face_recognize_once() -> dict:
             text=True,
             timeout=FACE_RECOG_TIMEOUT_SEC,
             check=False,
+            env={**os.environ, "DESKCLOCK_FACE_SAVE_DEBUG": "0"},
         )
         out = (p.stdout or "").strip()
         # Some OpenCV warnings may be printed to stdout; try to extract last JSON object.
-        jtxt = out
-        if "{" in out and "}" in out:
-            jtxt = out[out.rfind("{"): out.rfind("}") + 1]
-        data = json.loads(jtxt)
+        data = None
+        for line in reversed(out.splitlines()):
+            try:
+                data = json.loads(line)
+                break
+            except json.JSONDecodeError:
+                continue
         if not isinstance(data, dict):
-            return {"ok": False, "error": "bad_json_type", "raw": jtxt}
+            return {"ok": False, "error": "bad_json_type"}
         return data
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "timeout"}
@@ -679,29 +684,14 @@ def main():
     dpm = DisplayPowerStateMachine()  # fully compatible with v1.1.2 rules
     disp_state = dpm.disp_state       # "ON" | "DIM" | "OFF" (for legacy references)
 
-    # Light control (SwitchBot + face recognition)
+    # SwitchBot availability.  Session timing and delivery state are created
+    # below; do not recreate the removed independent light-off timer here.
     sb_token = os.environ.get("SWITCHBOT_TOKEN")
     sb_secret = os.environ.get("SWITCHBOT_SECRET")
     sb_light_id = os.environ.get("SWITCHBOT_lightDeviceId")
 
     state.light.enabled = bool(sb_token and sb_secret and sb_light_id)
-    state.light.is_on = False  # our internal state (best-effort)
-    state.light.last_cmd_mono = 0.0
-    state.light.probe_until_mono = 0.0
-    state.light.authorized_user_until_mono = 0.0
-    state.light.deadline_mono = (
-        arm_light_off(time.monotonic(), LIGHT_OFF_TIMEOUT_SEC)
-        if state.light.enabled
-        else 0.0
-    )
-    state.light.prev_pir_value = int(state.pir_value or 0)
-    state.light.on_verify_active = False
-    state.light.on_baseline_lux = None
-    state.light.on_next_action_mono = 0.0
-    state.light.on_next_action = ""
-    state.light.on_attempts = 0
-    state.light.on_failed_latched = False
-    state.light.face_recognition_pending = False
+    state.light.is_on = False  # best-effort result of the current session
 
     stop_event = threading.Event()
     service_deps = build_service_dependencies(state=state, stop_event=stop_event)
@@ -721,10 +711,55 @@ def main():
     brightness_cur = brightness_ctrl.brightness_cur
     brightness_target = brightness_ctrl.brightness_target
 
+    presence = PresenceController(time.monotonic(), PresenceSettings(
+        pir_confirm_sec=DISPLAY_PIR_CONFIRM_SEC,
+        motion_hold_sec=DISPLAY_MOTION_HOLD_SEC,
+        face_hold_sec=DISPLAY_FACE_HOLD_SEC,
+        check_idle_sec=DISPLAY_FACE_CHECK_IDLE_SEC,
+        check_interval_sec=DISPLAY_FACE_CHECK_INTERVAL_SEC,
+        misses_required=DISPLAY_FACE_MISSES_REQUIRED,
+        failure_grace_sec=DISPLAY_CAMERA_FAILURE_GRACE_SEC,
+    ), log=lambda message: _log_dpm_event(f"[PRESENCE] {message}"))
+    camera_check = CameraCheckWorker(run_face_recognize_once)
+    display_light = DisplayLightController(
+        time.monotonic(), motion_sec=DISPLAY_MOTION_HOLD_SEC,
+        authorized_face_sec=DISPLAY_FACE_HOLD_SEC, fade_sec=DISPLAY_FADE_SEC,
+    )
+    light_delivery = LightOnDelivery(
+        repeat_sec=LIGHT_ON_REPEAT_SEC, max_attempts=LIGHT_ON_MAX_ATTEMPTS,
+    )
+    state["display_activity_mono"] = presence.last_motion
+    _log_dpm_event(f"[PRESENCE] settings={presence.settings}")
+
     while running:
         color_changed = False
         now_mono = time.monotonic()
+        motion_detected = presence.update_pir(
+            now_mono, bool(state.pir_value) and not state.pir_err
+            and now_mono - state.pir_mono < 2.0)
+        camera_result = camera_check.poll()
+        if camera_result is not None:
+            if presence.record_camera(now_mono, camera_result):
+                display_light.authorized_face(now_mono)
+                _log_dpm_event("[PRESENCE] authorized_user=Hiroshi timer=600")
+        if presence.check_due(now_mono, "ON" if display_light.state != "OFF" else "OFF"):
+            if camera_check.request():
+                presence.next_check = now_mono + DISPLAY_FACE_CHECK_INTERVAL_SEC
+        if motion_detected:
+            session = display_light.motion(now_mono)
+            _log_dpm_event("[PRESENCE] session=motion timer=300")
+            # A fresh session immediately checks whether Hiroshi is present;
+            # it must not wait for the periodic idle-camera interval.
+            camera_check.request(requeue=True)
+        else:
+            session = display_light.step(now_mono)
 
+        # Discard gestures while HDMI is off, including a press begun before
+        # power-off. A release after waking must not complete that old gesture.
+        if disp_state == "OFF":
+            pressing = False
+            long_press_fired = False
+            press_start = 0.0
 
         # Long-press: reset color to white (works for both mouse and touchscreen)
         if pressing and (not long_press_fired) and ((now_mono - press_start) >= LONG_PRESS_SEC):
@@ -749,14 +784,24 @@ def main():
             if e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
                 running = False
 
+            if disp_state == "OFF" and e.type in (
+                pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP,
+                pygame.FINGERDOWN, pygame.FINGERUP,
+            ):
+                continue
+
             if e.type == pygame.MOUSEBUTTONDOWN or e.type == pygame.FINGERDOWN:
                 state.activity_mono = now_mono
+                state["display_activity_mono"] = now_mono
+                presence.touch(now_mono)
                 pressing = True
                 press_start = now_mono
                 long_press_fired = False
 
             if e.type == pygame.MOUSEBUTTONUP or e.type == pygame.FINGERUP:
                 state.activity_mono = now_mono
+                state["display_activity_mono"] = now_mono
+                presence.touch(now_mono)
                 if pressing:
                     pressing = False
                     if not long_press_fired:
@@ -876,203 +921,57 @@ def main():
         calendar_anim = 1.0 if state.calendar.popup else 0.0
         state.calendar.anim_phase = "open" if state.calendar.popup else "closed"
 
-        # --- Display Power Manager: evaluate ON/DIM/OFF ---
-        if DISPLAY_PM_ENABLE:
-            # Compute time since last motion
-            pir_mono = state.pir_mono
-            if isinstance(pir_mono, (int, float)):
-                t_no_motion = max(0.0, now_mono - float(pir_mono))
-            else:
-                t_no_motion = 1e9
-
-            # Lux (BH1750). Missing lux -> treat as bright (avoid OFF)
-            lux = state.lux
-            try:
-                lux_f = float(lux) if lux is not None else None
-            except Exception:
-                lux_f = None
-
-            # Dark hysteresis (v1.1.2 compatible)
-            dpm.update_dark(lux_f)
-            is_dark = dpm.is_dark
-
-            night_ok = _night_window(now)
-
-            # --- Light control (init in this scope; avoid NameError) ---
-            sb_token = os.environ.get("SWITCHBOT_TOKEN")
-            sb_secret = os.environ.get("SWITCHBOT_SECRET")
-            sb_light_id = os.environ.get("SWITCHBOT_lightDeviceId")
-
-            state.light.enabled = bool(sb_token and sb_secret and sb_light_id)
-
-            # --- Light control trigger: when dark & DIM/OFF and PIR rising edge ---
-            pir_v = int(state.pir_value or 0)
-            pir_rise = (pir_v == 1 and state.light.prev_pir_value == 0)
-            state.light.prev_pir_value = pir_v
-
-            # --- Light control (SwitchBot + face recognition) ---
-            # Independent from display PM:
-            # - Any motion => light ON immediately and (re)arm a fixed 5-minute OFF timer.
-            # - If no motion continues and the timer expires => light OFF.
-            # - On PIR rising edge (and only when dark / DIM / OFF), we run face recognition once.
-            #   Recognition does not extend the no-motion OFF timer.
-            if state.light.enabled:
-                if pir_rise:
-                    # A new detection may retry a cycle that previously exhausted its attempts.
-                    state.light.on_failed_latched = False
-
-                light_cycle_motion_active = (
-                    pir_v == 1
-                    or (
-                        state.light.on_verify_active
-                        and t_no_motion <= LIGHT_ON_MOTION_HOLD_SEC
-                    )
-                )
-                if light_cycle_motion_active:
-                    # Start one verification cycle per continuous PIR detection.
-                    if (
-                        pir_v == 1
-                        and not state.light.is_on
-                        and not state.light.on_verify_active
-                        and not state.light.on_failed_latched
-                        and ((now_mono - state.light.last_cmd_mono) >= SWITCHBOT_LIGHT_COOLDOWN_SEC)
-                    ):
-                        r = switchbot_light_on(sb_token, sb_secret, sb_light_id)
-                        state.light.last_cmd_mono = now_mono
-                        state.light.on_verify_active = True
-                        state.light.on_baseline_lux = lux_f
-                        state.light.on_attempts = 1
-                        state.light.on_next_action = "repeat"
-                        state.light.on_next_action_mono = now_mono + LIGHT_ON_REPEAT_SEC
-                        state.light.face_recognition_pending = bool(
-                            pir_rise and (is_dark or disp_state in ("DIM", "OFF"))
-                        )
-                        _log_light_event(
-                            f"verification=start baseline_lux={lux_f!r} attempts=1 "
-                            f"api_ok={switchbot_command_succeeded(r)}"
-                        )
-
-                    if (
-                        state.light.on_verify_active
-                        and now_mono >= state.light.on_next_action_mono
-                    ):
-                        if state.light.on_next_action == "repeat":
-                            # This is deliberately unconditional with respect to the estimated
-                            # light state. Motion is still recent, so send the exact turnOn again.
-                            r = switchbot_light_on(sb_token, sb_secret, sb_light_id)
-                            state.light.last_cmd_mono = now_mono
-                            state.light.on_attempts += 1
-                            state.light.on_next_action = "verify"
-                            state.light.on_next_action_mono = now_mono + LIGHT_ON_VERIFY_SEC
-                            _log_light_event(
-                                f"verification=repeat-turnOn attempts={state.light.on_attempts} "
-                                f"api_ok={switchbot_command_succeeded(r)}"
-                            )
-
-                        elif state.light.on_next_action == "verify":
-                            lux_fresh = lux_sample_is_fresh(
-                                now_mono=now_mono,
-                                lux_mono=state.lux_mono,
-                                stale_sec=BH1750_STALE_SEC,
-                            )
-                            confirmed = lux_fresh and light_is_confirmed(
-                                baseline_lux=state.light.on_baseline_lux,
-                                current_lux=lux_f,
-                                light_on_lx=BH1750_LIGHT_ON_LX,
-                                min_rise_lx=LIGHT_ON_MIN_RISE_LX,
-                            )
-                            if confirmed:
-                                state.light.is_on = True
-                                state.light.on_verify_active = False
-                                state.light.on_next_action = ""
-                                _log_light_event(
-                                    f"verification=confirmed lux={lux_f!r} "
-                                    f"baseline_lux={state.light.on_baseline_lux!r} "
-                                    f"attempts={state.light.on_attempts}"
-                                )
-                                # Face recognition can block for up to 12 seconds, so it runs
-                                # only after retransmission and physical light verification finish.
-                                if state.light.face_recognition_pending:
-                                    state.light.face_recognition_pending = False
-                                    fr = run_face_recognize_once()
-                                    if isinstance(fr, dict) and fr.get("ok") and fr.get("is_authorized_user") is True:
-                                        state.light.authorized_user_until_mono = now_mono + AUTHORIZED_USER_LIGHT_GRACE_SEC
-                            elif state.light.on_attempts < LIGHT_ON_MAX_ATTEMPTS:
-                                r = switchbot_light_on(sb_token, sb_secret, sb_light_id)
-                                state.light.last_cmd_mono = now_mono
-                                state.light.on_attempts += 1
-                                state.light.on_next_action_mono = now_mono + LIGHT_ON_VERIFY_SEC
-                                _log_light_event(
-                                    f"verification=retry-turnOn lux={lux_f!r} lux_fresh={lux_fresh} "
-                                    f"attempts={state.light.on_attempts} "
-                                    f"api_ok={switchbot_command_succeeded(r)}"
-                                )
-                            else:
-                                _log_light_event(
-                                    f"点灯確認失敗 lux={lux_f!r} lux_fresh={lux_fresh} "
-                                    f"baseline_lux={state.light.on_baseline_lux!r} "
-                                    f"attempts={state.light.on_attempts}"
-                                )
-                                state.light.is_on = False
-                                state.light.on_verify_active = False
-                                state.light.on_next_action = ""
-                                state.light.on_failed_latched = True
-                                state.light.face_recognition_pending = False
-
-                    # Every detection restarts the fixed no-motion deadline.
-                    # Identity recognition must not keep an empty room lit.
-                    if pir_v == 1:
-                        state.light.deadline_mono = arm_light_off(now_mono, LIGHT_OFF_TIMEOUT_SEC)
-
-                else:
-                    # No motion: if the timer has expired, turn OFF (best-effort)
-                    if light_off_due(
-                        now_mono=now_mono,
-                        deadline_mono=state.light.deadline_mono,
-                        last_cmd_mono=state.light.last_cmd_mono,
-                        cooldown_sec=SWITCHBOT_LIGHT_COOLDOWN_SEC,
-                    ):
-                        r = switchbot_light_off(sb_token, sb_secret, sb_light_id)
-                        state.light.last_cmd_mono = now_mono
-                        if switchbot_command_succeeded(r):
-                            state.light.is_on = False
-                            state.light.on_verify_active = False
-                            state.light.on_next_action = ""
-                            state.light.on_attempts = 0
-                            state.light.face_recognition_pending = False
-                            state.light.deadline_mono = 0.0
-                            state.light.authorized_user_until_mono = 0.0
-
-            # StateMachine: decide next display state and HDMI command (fully compatible)
-            decision = dpm.step(
-                now_mono=now_mono,
-                pir_mono=pir_mono,
-                brightness_target=brightness_target,
-                brightness_cur=brightness_cur,
+        # The session is the sole authority for display and room-light power.
+        # No lux, raw PIR, or independent SwitchBot timer may issue commands.
+        sb_token = os.environ.get("SWITCHBOT_TOKEN")
+        sb_secret = os.environ.get("SWITCHBOT_SECRET")
+        sb_light_id = os.environ.get("SWITCHBOT_lightDeviceId")
+        state.light.enabled = bool(sb_token and sb_secret and sb_light_id)
+        if session.display_command == "ON":
+            _run_cmd_silent(HDMI_ON_CMD)
+        elif session.display_command == "OFF":
+            _run_cmd_silent(HDMI_OFF_CMD)
+        light_on_command = None
+        if session.light_command == "ON":
+            light_on_command = light_delivery.start(now_mono, state.lux)
+        elif light_delivery.active:
+            lux_fresh = lux_sample_is_fresh(
+                now_mono=now_mono, lux_mono=state.lux_mono,
+                stale_sec=BH1750_STALE_SEC,
             )
-            hdmi_cmd = decision.hdmi_cmd
-            disp_state = dpm.disp_state
+            confirmed = lux_fresh and light_is_confirmed(
+                baseline_lux=light_delivery.baseline_lux,
+                current_lux=state.lux,
+                light_on_lx=BH1750_LIGHT_ON_LX,
+                min_rise_lx=LIGHT_ON_MIN_RISE_LX,
+            )
+            was_active = light_delivery.active
+            light_on_command = light_delivery.step(now_mono, confirmed=confirmed)
+            if was_active and not light_delivery.active:
+                _log_light_event(
+                    f"verification={'confirmed' if confirmed else 'failed'} "
+                    f"lux={state.lux!r} baseline_lux={light_delivery.baseline_lux!r}"
+                )
+        if light_on_command == "ON" and state.light.enabled:
+            response = switchbot_light_on(sb_token, sb_secret, sb_light_id)
+            state.light.is_on = switchbot_command_succeeded(response)
+            _log_light_event(
+                f"verification=turnOn attempts={light_delivery.attempts} "
+                f"api_ok={switchbot_command_succeeded(response)}"
+            )
+        if session.light_command == "OFF" and state.light.enabled:
+            light_delivery.cancel()
+            response = switchbot_light_off(sb_token, sb_secret, sb_light_id)
+            state.light.is_on = False if switchbot_command_succeeded(response) else state.light.is_on
 
-            # Log display power state transitions for troubleshooting.
-            # DPM transition logging is handled by DisplayPowerStateMachine._on_transition
-
-
-            if hdmi_cmd == "OFF":
-                _run_cmd_silent(HDMI_OFF_CMD)
-            elif hdmi_cmd == "ON":
-                _run_cmd_silent(HDMI_ON_CMD)
-
-        # --- Brightness control (v2 skeleton: controller) ---
-        br_decision = brightness_ctrl.update(
-            now_mono=now_mono,
-            shared=state,
-            disp_state=disp_state,
+        disp_state = "OFF" if session.display_state == "OFF" else (
+            "DIM" if session.display_state == "FADING" else "ON"
         )
-        brightness_cur = br_decision.state.brightness_cur
-        brightness_target = br_decision.state.brightness_target
+        brightness_cur = session.brightness
+        brightness_target = session.brightness
         state.brightness_cur = brightness_cur
         state.brightness_target = brightness_target
-        desired = br_decision.desired
+        desired = brightness_target
 
         theme_spec = get_theme_spec(getattr(state, "theme", "default"))
         fg_base = state.base_color if getattr(theme_spec, "use_base_color", False) else theme_spec.fg_color
@@ -1266,6 +1165,7 @@ def main():
         clock.tick(30)
 
     stop_event.set()
+    camera_check.close()
     pygame.quit()
 
 if __name__ == "__main__":

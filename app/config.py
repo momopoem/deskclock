@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 
 __product__ = "Desk Side Clock"
-__version__ = "v2.3.7"
+__version__ = "v2.3.10"
 __status__ = "release"
 APP_VERSION = __version__
 
@@ -113,10 +113,22 @@ HDMI_OFF_CMD = ["sudo", "-n", "/usr/local/bin/hdmi_off.sh"]
 HDMI_ON_CMD = ["sudo", "-n", "/usr/local/bin/hdmi_on.sh"]
 
 LIGHT_OFF_TIMEOUT_SEC = 300
+LIGHT_PIR_SUSTAINED_SEC = 2.0
+LIGHT_PIR_PULSE_SEC = 0.4
+LIGHT_PIR_REPEAT_WINDOW_SEC = 10.0
 PIR_NO_MOTION_SEC = 180
 PIR_DIM_TO = 0.20
 PIR_FADE_SEC = 10.0
 PIR_WAKE_OVERRIDE_SEC = 2.0
+# Trial display-presence policy (seconds); independent of the room-light timer.
+DISPLAY_PIR_CONFIRM_SEC = 0.6
+DISPLAY_MOTION_HOLD_SEC = 300.0
+DISPLAY_FACE_HOLD_SEC = 600.0
+DISPLAY_FADE_SEC = 30.0
+DISPLAY_FACE_CHECK_IDLE_SEC = 30.0
+DISPLAY_FACE_CHECK_INTERVAL_SEC = 60.0
+DISPLAY_FACE_MISSES_REQUIRED = 3
+DISPLAY_CAMERA_FAILURE_GRACE_SEC = 120.0
 DEBUG_SR501 = True
 SR501_DOT_RADIUS = 6
 SR501_DOT_MARGIN = 10

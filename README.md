@@ -4,31 +4,30 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 
 ### デフォルトテーマ
 
-![DeskSide Clock v2.3.6のデフォルトテーマ](screen1.png)
+![DeskSide Clockのデフォルトテーマ](screen1.png)
 
 ### カレンダー表示
 
-![DeskSide Clock v2.3.6のカレンダー表示](screen2.png)
+![DeskSide Clockのカレンダー表示](screen2.png)
 
 ### LCDテーマ
 
-![DeskSide Clock v2.3.6のLCDテーマ](screen3.png)
+![DeskSide ClockのLCDテーマ](screen3.png)
 
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.3.7**
+- バージョン: **v2.3.10**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
-v2.3.7では、全8種類の物理センサーの個別・一括診断と自動テストをソースに同梱しました。
-追加ZIPの展開は不要です。テストの手順は [センサー診断ガイド](app/test/README.md) を参照してください。
+詳細資料はv2.3.10仕様です。
 
-詳細資料は次のファイルにあります（設計・仕様資料と掲載画面はv2.3.6版を継続使用）。
+- `documents/DeskSideClock_基本設計書_v2.3.10.docx`
+- `documents/DeskSideClock_ソフトウェア仕様書_v2.3.10.docx`
 
-- `documents/DeskSideClock_基本設計書_v2.3.6.docx`
-- `documents/DeskSideClock_ソフトウェア仕様書_v2.3.6.docx`
+物理センサーの個別・一括診断と自動テストはソースに同梱しています。手順は[センサー診断ガイド](app/test/README.md)を参照してください。
 
 ## 主な機能
 
@@ -145,14 +144,11 @@ journalctl --user -u deskclock.service
 依存関係がそろった開発環境では、次のコマンドでテストできます。
 
 ```bash
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
+python -m unittest discover -s tests -v
 python -m compileall -q app tests
 ```
 
 センサー診断スクリプトを実行する際は、DeskSide Clock本体と同じI²Cバスへ同時アクセスしないよう、必要に応じてサービスを停止してください。
-
-全8種類の個別・一括実機診断と自動テストの実行方法は [センサー診断ガイド](app/test/README.md) を参照してください。
 
 ### 照明再送・点灯確認の実機テスト
 
@@ -162,6 +158,19 @@ python -m compileall -q app tests
 4. 不達を再現するには、SwitchBot Hubの赤外線送信部を一時的に遮ります。最大3回の`turnOn`後も暗い場合、`[LGT] 点灯確認失敗`が記録されます。
 
 赤外線を遮るテストではHubの電源を切らず、放熱口を塞がないでください。ログ上の`result=OK`はAPI受付成功、`verification=confirmed`はBH1750による実点灯確認を意味します。
+
+## 画面・照明の在席連動
+
+PIR入力を0.6秒連続して確認すると、時計画面と照明を同時にONにし、5分タイマーを開始します。
+その都度、非同期で顔認証を実行し、登録済みのヒロシを認証した場合は認証時点から10分へ延長します。
+その後のPIR再検知は5分タイマーに戻し、認証も再実行します。
+
+タイマー満了時は時計を30秒間かけて減光します。減光中のPIR検知では通常表示へ戻り、5分タイマーを
+再開します。減光完了時だけ、画面OFFと照明の`turnOff`を同時に実行します。照度、時刻、独立した
+照明タイマーは照明命令を発行しません。
+
+`turnOn`は即時送信後に3秒後の再送、BH1750での点灯確認、未確認時の最大3回目までの再試行を行います。
+API受付と実点灯確認はログで個別に確認できます。
 
 ## 著作権・ライセンス
 
