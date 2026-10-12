@@ -87,6 +87,7 @@ from utils.common import (
 from services.ntp_monitor import ntp_monitor_update
 from services.presence_controller import PresenceController, PresenceSettings, CameraCheckWorker
 from services.display_light_controller import DisplayLightController, LightOnDelivery
+from services.tv_controller import AndroidTvRemoteStateReader, TvPowerDelivery
 from sensors import (
     _bh1750_read_lux,
     _sht20_read_temp_hum_via_i2c,
@@ -516,6 +517,16 @@ def switchbot_light_off(token: str, secret: str, light_device_id: str) -> dict:
     return res
 
 
+def switchbot_tv_command(token: str, secret: str, tv_device_id: str, command: str) -> bool:
+    """Deliver one explicitly requested TV virtual-remote command to SwitchBot."""
+    _log_light_event(f"[TV] api_command={command} device={tv_device_id} requested")
+    with requests.Session() as s:
+        response = switchbot_send_command(s, token, secret, tv_device_id, command)
+    succeeded = switchbot_command_succeeded(response)
+    _log_light_event(f"[TV] api_command={command} result={'OK' if succeeded else 'NG'}")
+    return succeeded
+
+
 # =========================
 # Face recognition (call external script using system python)
 # =========================
@@ -689,6 +700,7 @@ def main():
     sb_token = os.environ.get("SWITCHBOT_TOKEN")
     sb_secret = os.environ.get("SWITCHBOT_SECRET")
     sb_light_id = os.environ.get("SWITCHBOT_lightDeviceId")
+    sb_tv_id = os.environ.get("SWITCHBOT_tvDeviceId")
 
     state.light.enabled = bool(sb_token and sb_secret and sb_light_id)
     state.light.is_on = False  # best-effort result of the current session
@@ -728,6 +740,21 @@ def main():
     light_delivery = LightOnDelivery(
         repeat_sec=LIGHT_ON_REPEAT_SEC, max_attempts=LIGHT_ON_MAX_ATTEMPTS,
     )
+    tv_delivery = None
+    if TV_ENABLE:
+        if sb_token and sb_secret and sb_tv_id and TV_HOST:
+            tv_delivery = TvPowerDelivery(
+                lambda command: switchbot_tv_command(sb_token, sb_secret, sb_tv_id, command),
+                AndroidTvRemoteStateReader(TV_HOST, TV_CERT_PATH, TV_KEY_PATH),
+                detect_delay_sec=TV_DETECT_DELAY_SEC,
+                poll_sec=TV_STATE_POLL_SEC,
+                retry_guard_sec=TV_RETRY_GUARD_SEC,
+                timeout_sec=TV_COMMAND_TIMEOUT_SEC,
+                log=_log_light_event,
+            )
+            _log_light_event(f"[TV] enabled host={TV_HOST}")
+        else:
+            _log_light_event("[TV] disabled reason=missing_switchbot_or_host_configuration")
     state["display_activity_mono"] = presence.last_motion
     _log_dpm_event(f"[PRESENCE] settings={presence.settings}")
 
@@ -934,6 +961,8 @@ def main():
         light_on_command = None
         if session.light_command == "ON":
             light_on_command = light_delivery.start(now_mono, state.lux)
+            if tv_delivery is not None:
+                tv_delivery.request(True)
         elif light_delivery.active:
             lux_fresh = lux_sample_is_fresh(
                 now_mono=now_mono, lux_mono=state.lux_mono,
@@ -963,6 +992,8 @@ def main():
             light_delivery.cancel()
             response = switchbot_light_off(sb_token, sb_secret, sb_light_id)
             state.light.is_on = False if switchbot_command_succeeded(response) else state.light.is_on
+        if session.light_command == "OFF" and tv_delivery is not None:
+            tv_delivery.request(False)
 
         disp_state = "OFF" if session.display_state == "OFF" else (
             "DIM" if session.display_state == "FADING" else "ON"
@@ -1165,6 +1196,8 @@ def main():
         clock.tick(30)
 
     stop_event.set()
+    if tv_delivery is not None:
+        tv_delivery.stop()
     camera_check.close()
     pygame.quit()
 

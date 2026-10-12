@@ -1,5 +1,6 @@
 pygame>=2.6
 requests>=2.31
+androidtvremote2>=0.3.2
 numpy>=1.26
 opencv-contrib-python>=4.8
 holidays>=0.45

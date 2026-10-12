@@ -119,6 +119,7 @@ SWITCHBOT_SECRET
 SWITCHBOT_inDeviceId
 SWITCHBOT_outDeviceId
 SWITCHBOT_lightDeviceId
+SWITCHBOT_tvDeviceId
 OPEN_METEO_LATITUDE
 OPEN_METEO_LONGITUDE
 OPEN_METEO_TIMEZONE
@@ -140,6 +141,22 @@ DESKCLOCK_FACE_LABEL
 ### SwitchBot Cloud API
 
 SwitchBot Open APIは公式文書上、個人利用向けです。商用利用または大規模利用では、事前にSwitchBotへ相談し、許諾・利用上限・契約条件を確認してください。トークン、シークレット、デバイスIDは非Git管理の環境ファイルから渡してください。
+
+### 書斎テレビの連動
+
+`DESKCLOCK_TV_ENABLE=1` を設定すると、表示・照明と同じプレゼンスセッションに書斎テレビを連動させます。PIRで照明をONにする時はテレビもON、30秒フェード終了後に照明をOFFにする時はテレビもOFFを要求します。起動時にはテレビの状態を変えません。
+
+テレビ用のSwitchBot赤外線仮想リモコンと、Android TV Remote v2のペアリング証明書が必要です。証明書はGit管理せず、既定では次の場所に置きます。
+
+```text
+SWITCHBOT_tvDeviceId=<テレビのSwitchBot仮想リモコンID>
+DESKCLOCK_TV_ENABLE=1
+DESKCLOCK_TV_HOST=<テレビの固定IPアドレス>
+DESKCLOCK_TV_CERT_PATH=~/.config/deskclock/tv/client.pem
+DESKCLOCK_TV_KEY_PATH=~/.config/deskclock/tv/client.key
+```
+
+テレビはSwitchBot APIの受付だけでは成功としません。送信から2秒後にネットワーク状態確認を始め、期待状態に至らない場合は、状態が明確に反対側で10秒以上経過している時だけ1回再送します。状態不明時は送信・再送をしません。
 
 ## 起動とテスト
 

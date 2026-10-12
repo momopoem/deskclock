@@ -163,6 +163,21 @@ STATE_PATH = os.path.join(STATE_DIR, "state.json")
 
 SWITCHBOT_LIGHT_TIMEOUT_SEC = 8
 SWITCHBOT_LIGHT_COOLDOWN_SEC = 3.0
+# The desk television follows the display/light presence session. It remains
+# opt-in until its dedicated SwitchBot virtual remote and Android TV pairing
+# material have been provisioned on the clock.
+TV_ENABLE = os.environ.get("DESKCLOCK_TV_ENABLE", "0").strip().lower() in {"1", "true", "yes", "on"}
+TV_HOST = os.environ.get("DESKCLOCK_TV_HOST", "")
+TV_CERT_PATH = os.path.expanduser(
+    os.environ.get("DESKCLOCK_TV_CERT_PATH", "~/.config/deskclock/tv/client.pem")
+)
+TV_KEY_PATH = os.path.expanduser(
+    os.environ.get("DESKCLOCK_TV_KEY_PATH", "~/.config/deskclock/tv/client.key")
+)
+TV_DETECT_DELAY_SEC = 2.0
+TV_STATE_POLL_SEC = 2.0
+TV_RETRY_GUARD_SEC = 10.0
+TV_COMMAND_TIMEOUT_SEC = 30.0
 LIGHT_PROBE_SEC = 8.0
 AUTHORIZED_USER_LIGHT_GRACE_SEC = 1800.0
 LIGHT_OFF_TIMEOUT_SEC = 300.0
