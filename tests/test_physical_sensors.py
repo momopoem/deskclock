@@ -103,6 +103,7 @@ class PhysicalSensorTests(unittest.TestCase):
         with patch.object(s, "read_sht20_indoor", return_value=(25, 50)):
             s.fetch_sht20_loop(state, Stop())
         self.assertEqual(state["sht20_temp_c"], 25 + s.SHT20_TEMP_OFFSET_C)
+        self.assertEqual(state["sht20_hum_pct"], 50 + s.SHT20_HUM_OFFSET_PCT)
         self.assertEqual(state["in_temp_c"], 10)
         self.assertEqual(state["in_hum_pct"], 20)
         timestamp = state["sht20_ts"]
@@ -118,7 +119,8 @@ class PhysicalSensorTests(unittest.TestCase):
             self.assertEqual(state["aht21_ts"], 1)
             s.fetch_aht21_loop(state, Stop())
         self.assertEqual(state["aht21_err"], "")
-        self.assertEqual(state["aht21_temp_c"], 25)
+        self.assertEqual(state["aht21_temp_c"], 25 + s.AHT21_TEMP_OFFSET_C)
+        self.assertEqual(state["aht21_hum_pct"], 50 + s.AHT21_HUM_OFFSET_PCT)
 
     def test_bme280_signed_calibration_and_invalid_length(self):
         cal = s._bme280_parse_calibration([255] * 26, [255] * 7)
@@ -136,6 +138,7 @@ class PhysicalSensorTests(unittest.TestCase):
             s.fetch_bme280_loop(state, Stop(startup=1))
         self.assertEqual(convert.call_args.args[:3], (519888, 415148, 30000))
         self.assertEqual(state["bme280_temp_c"], 25 + s.BME280_TEMP_OFFSET_C)
+        self.assertEqual(state["bme280_hum_pct"], 50 + s.BME280_HUM_OFFSET_PCT)
         self.assertEqual(state["bme280_pressure_hpa"], 1000)
         self.assertEqual(state["bme280_err"], "")
         self.bus.__exit__.assert_called_once()

@@ -105,7 +105,7 @@ def fetch_bme280_loop(shared, stop_event):
                     adc_h = (data[6] << 8) | data[7]
                     temp_c, hum_pct, pressure_hpa = _bme280_compensate(adc_t, adc_p, adc_h, cal)
                     shared["bme280_temp_c"] = temp_c + BME280_TEMP_OFFSET_C
-                    shared["bme280_hum_pct"] = hum_pct
+                    shared["bme280_hum_pct"] = hum_pct + BME280_HUM_OFFSET_PCT
                     shared["bme280_pressure_hpa"] = pressure_hpa
                     shared["bme280_ts"] = time.time()
                     shared["bme280_err"] = ""

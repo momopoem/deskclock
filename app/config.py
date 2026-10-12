@@ -16,6 +16,8 @@ AHT21_ENABLE = True
 AHT21_I2C_BUS = 1
 AHT21_ADDR = 0x38
 AHT21_REFRESH_SEC = 5
+AHT21_TEMP_OFFSET_C = -7.1
+AHT21_HUM_OFFSET_PCT = 11
 
 ENS160_ENABLE = True
 ENS160_I2C_BUS = 1
@@ -28,7 +30,9 @@ BME280_ENABLE = True
 BME280_I2C_BUS = int(os.environ.get("BME280_I2C_BUS", "1"))
 BME280_ADDR = int(os.environ.get("BME280_ADDR", "0x76"), 16)
 BME280_REFRESH_SEC = 5
-BME280_TEMP_OFFSET_C = -5.1
+# Existing temperature offset -5.1°C plus the requested -0.1°C adjustment.
+BME280_TEMP_OFFSET_C = -5.2
+BME280_HUM_OFFSET_PCT = 15
 BME280_VALUE_STALE_SEC = 30.0
 
 SCD40_ENABLE = True
@@ -37,8 +41,9 @@ SCD40_ADDR = int(os.environ.get("SCD40_ADDR", "0x62"), 16)
 SCD40_REFRESH_SEC = 5
 SCD40_VALUE_STALE_SEC = 30.0
 
-SHT20_TEMP_OFFSET_C = -4.2
-SHT20_HUM_OFFSET_PCT = 0
+# Existing offsets plus the requested temperature -4.8°C / humidity +14%RH.
+SHT20_TEMP_OFFSET_C = -9.0
+SHT20_HUM_OFFSET_PCT = 14
 SHT20_REFRESH_SEC = 5
 SHT20_I2C_ADDR = int(os.environ.get("SHT20_ADDR", "0x40"), 16)
 

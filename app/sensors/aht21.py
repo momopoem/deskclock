@@ -89,8 +89,8 @@ def fetch_aht21_loop(shared, stop_event):
     while not stop_event.is_set():
         try:
             t, h = _aht21_read_temp_hum_via_i2c(bus_num=AHT21_I2C_BUS, addr=AHT21_ADDR)
-            shared["aht21_temp_c"] = float(t)
-            shared["aht21_hum_pct"] = int(h)
+            shared["aht21_temp_c"] = float(t) + AHT21_TEMP_OFFSET_C
+            shared["aht21_hum_pct"] = int(h) + AHT21_HUM_OFFSET_PCT
             shared["aht21_ts"] = time.time()
             shared["aht21_err"] = ""
         except Exception as e:
