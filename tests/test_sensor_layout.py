@@ -26,6 +26,17 @@ def test_production_startup_imports_sensor_workers_from_sensors_package():
         assert "from sensors import (" in source
 
 
+def test_sensors_package_exports_every_symbol_imported_by_clock():
+    source = (ROOT / "app" / "clock.py").read_text(encoding="utf-8")
+    exported = (ROOT / "app" / "sensors" / "__init__.py").read_text(encoding="utf-8")
+    for name in SENSORS.values():
+        assert name in exported
+    for name in ("_bh1750_read_lux", "_sht20_read_temp_hum_via_i2c",
+                 "_aht21_read_temp_hum_via_i2c", "read_sht20_indoor"):
+        assert name in source
+        assert name in exported
+
+
 def test_legacy_sensor_service_is_only_a_compatibility_facade():
     source = (ROOT / "app/services/sensor_service.py").read_text(encoding="utf-8")
     assert "from sensors import" in source
