@@ -22,10 +22,10 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
-詳細資料はv2.3.3作成時点の資料です。
+詳細資料はv2.3.10仕様です。
 
-- `documents/DeskSideClock_基本設計書_v2.3.3.docx`
-- `documents/DeskSideClock_ソフトウェア仕様書_v2.3.3.docx`
+- `documents/DeskSideClock_基本設計書_v2.3.10.docx`
+- `documents/DeskSideClock_ソフトウェア仕様書_v2.3.10.docx`
 
 ## 主な機能
 
