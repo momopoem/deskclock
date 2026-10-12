@@ -17,15 +17,15 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.4.0**
+- バージョン: **v2.4.1**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
-詳細資料はv2.4.0仕様です。
+詳細資料はv2.4.1仕様です。
 
-- `documents/DeskSideClock_基本設計書_v2.4.0.docx`
-- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.0.docx`
+- `documents/DeskSideClock_基本設計書_v2.4.1.docx`
+- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.1.docx`
 
 物理センサーの個別・一括診断と自動テストはソースに同梱しています。手順は[センサー診断ガイド](app/test/README.md)を参照してください。
 
@@ -101,7 +101,7 @@ face/                        顔登録・学習・単発認識（個人データ
 tests/                       pytestによる自動・回帰テスト
   fixtures/                   顔誤検出の回帰画像
 tools/                       検証補助（顔候補画像の検証など）
-documents/                   v2.4.0の基本設計書・ソフトウェア仕様書
+documents/                   v2.4.1の基本設計書・ソフトウェア仕様書
   assets/                     設計書に使用する実機画面・操作領域図
 fonts/                       同梱フォントとライセンス
 run-clock.sh                 systemdから呼び出す起動スクリプト
