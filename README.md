@@ -47,11 +47,11 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 |---|---|
 | Raspberry Pi 5 Model B Rev 1.1 | メインコンピューター |
 | YMK EM101 HDMIディスプレイ | 1920×1200、約10.1インチ、HDMI-A-1 |
-| BME280（I²C `0x76`） | 室温・湿度・気圧。温度補正値は`-5.1℃` |
+| BME280（I²C `0x76`） | 室温・湿度・気圧。温度補正値は`-5.2℃`、湿度補正値は`+15%RH` |
 | SCD40（I²C `0x62`） | CO₂・温度・湿度 |
 | ENS160（I²C `0x53`） | AQI・TVOC・eCO₂。温湿度補正にはBME280値を使用 |
-| SHT20（I²C `0x40`） | 室温・湿度。温度補正値は`-4.2℃` |
-| AHT21（I²C `0x38`） | 温度・湿度センサー。raw I²C転送で通信 |
+| SHT20（I²C `0x40`） | 室温・湿度。温度補正値は`-9.0℃`、湿度補正値は`+14%RH` |
+| AHT21（I²C `0x38`） | 温度・湿度センサー。raw I²C転送で通信。温度補正値は`-7.1℃`、湿度補正値は`+11%RH` |
 | BH1750（I²C `0x23`） | 周囲照度 |
 | HC-SR501 PIRセンサー | 人感検出、GPIO 17 |
 | カメラ | OpenCVによる顔検出・顔認識 |
@@ -87,16 +87,26 @@ Raspberry Pi側では、用途に応じて`gpiod`、`i2c-tools`、日本語フ�
 ## ディレクトリ構成
 
 ```text
-app/                 メインアプリケーション
-  services/          センサー、天気、NTP、照明、輝度制御
-  renderer/          画面描画
-  widgets/           時計・情報表示ウィジェット
-  test/              実機向けセンサー診断スクリプト
-face/                顔登録・認識コード（個人データはリポジトリ外）
-fonts/               同梱フォント
-tests/               自動テスト
-documents/           設計・仕様資料
-run-clock.sh         systemdから呼び出す起動スクリプト
+app/                         メインアプリケーション
+  clock.py                    主ループ、入力、表示・照明セッション
+  bootstrap.py                依存関係の組立
+  config.py / state.py        設定値、共有状態、UI状態
+  renderer/                   ClockRenderer、テーマ、描画コンテキスト
+  widgets/                    時刻・下段情報の表示ウィジェット
+  sensors/                    物理センサー別の取得worker（I²C／GPIO）
+  services/                   SensorManager、天気、NTP、輝度、表示・照明制御
+  utils/                      表示書式、状態保存、共通処理
+  test/                       実機向けセンサー・カメラ診断スクリプト
+face/                        顔登録・学習・単発認識（個人データはリポジトリ外）
+tests/                       pytestによる自動・回帰テスト
+  fixtures/                   顔誤検出の回帰画像
+tools/                       検証補助（顔候補画像の検証など）
+documents/                   v2.4.0の基本設計書・ソフトウェア仕様書
+  assets/                     設計書に使用する実機画面・操作領域図
+fonts/                       同梱フォントとライセンス
+run-clock.sh                 systemdから呼び出す起動スクリプト
+requirements*.txt            実行用・テスト用Python依存関係
+VERSION                      正式バージョン
 ```
 
 ## 設定
