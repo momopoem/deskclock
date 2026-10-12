@@ -41,7 +41,8 @@ def context(events, display='OFF', pressing=False):
     return dict(pygame=pg, state=state, time=NS(monotonic=lambda: 100),
                 disp_state=display, pressing=pressing, long_press_fired=False,
                 press_start=1, LONG_PRESS_SEC=2, sw=800, sh=480, running=True,
-                save_ui_state=None, random_bright_color=lambda: (1, 2, 3), saved=saved,
+                now_mono=100, color_changed=False, save_ui_state=None,
+                random_bright_color=lambda: (1, 2, 3), saved=saved,
                 presence=PresenceController(100))
 
 

@@ -69,5 +69,7 @@ def test_sensor_error_cancels_candidate_and_stale_high():
 def test_clock_uses_display_light_controller_instead_of_legacy_light_timer():
     source = (Path(__file__).parents[1] / 'app/clock.py').read_text(encoding='utf-8')
     assert 'DisplayLightController(' in source
-    assert 'LIGHT_OFF_TIMEOUT_SEC' not in source
+    # The legacy constant may remain for external compatibility, but it must
+    # not drive the application loop after the session-controller migration.
+    assert 'light_off_due(' not in source
     assert 'light_motion_active' not in source
