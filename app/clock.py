@@ -741,14 +741,14 @@ def main():
         if camera_result is not None:
             if presence.record_camera(now_mono, camera_result):
                 display_light.authorized_face(now_mono)
-                _log_dpm_event("[PRESENCE] authorized_user=Hiroshi timer=600")
+                _log_dpm_event("[PRESENCE] authorized_user=true timer=600")
         if presence.check_due(now_mono, "ON" if display_light.state != "OFF" else "OFF"):
             if camera_check.request():
                 presence.next_check = now_mono + DISPLAY_FACE_CHECK_INTERVAL_SEC
         if motion_detected:
             session = display_light.motion(now_mono)
             _log_dpm_event("[PRESENCE] session=motion timer=300")
-            # A fresh session immediately checks whether Hiroshi is present;
+            # A fresh session immediately checks whether an authorized user is present;
             # it must not wait for the periodic idle-camera interval.
             camera_check.request(requeue=True)
         else:

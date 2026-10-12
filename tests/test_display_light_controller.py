@@ -15,7 +15,7 @@ def test_motion_starts_five_minute_display_and_light_session():
     assert c.step(310).display_state == "FADING"
 
 
-def test_authorized_hiroshi_face_extends_session_to_ten_minutes():
+def test_authorized_face_extends_session_to_ten_minutes():
     c = DisplayLightController(0)
     c.motion(10)
     c.authorized_face(20)
