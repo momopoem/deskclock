@@ -519,7 +519,8 @@ def switchbot_light_off(token: str, secret: str, light_device_id: str) -> dict:
 
 def switchbot_tv_command(token: str, secret: str, tv_device_id: str, command: str) -> bool:
     """Deliver one explicitly requested TV virtual-remote command to SwitchBot."""
-    _log_light_event(f"[TV] api_command={command} device={tv_device_id} requested")
+    # Device IDs are configuration identifiers; do not include them in logs.
+    _log_light_event(f"[TV] api_command={command} requested")
     with requests.Session() as s:
         response = switchbot_send_command(s, token, secret, tv_device_id, command)
     succeeded = switchbot_command_succeeded(response)

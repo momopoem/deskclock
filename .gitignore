@@ -20,6 +20,8 @@ state.json
 switchbot.env
 secrets/
 credentials/
+*.pem
+*.key
 
 # Biometric/personal face-recognition data (kept outside Git)
 face/*.jpg

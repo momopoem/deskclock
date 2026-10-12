@@ -18,6 +18,11 @@ async def pair(host: str, cert: Path, key: Path, name: str) -> None:
     remote = AndroidTVRemote(name, str(cert), str(key), host, enable_voice=False)
     try:
         await remote.async_generate_cert_if_missing()
+        # androidtvremote2 creates these files with the process umask.  The
+        # private key is authentication material, so never leave it readable
+        # by other local users.
+        cert.chmod(0o600)
+        key.chmod(0o600)
         await remote.async_start_pairing()
         code = input("テレビに表示された6桁のコードを入力: ").strip()
         await remote.async_finish_pairing(code)
