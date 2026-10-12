@@ -350,6 +350,9 @@ def indoor_source_valid(src: str, weather: dict, use_switchbot_in: bool, sht20_r
     if src == "SHT20":
         ts = weather.get("sht20_ts", last_sht20_ok_ts or 0.0)
         return _is_fresh(ts, max_age_sec=max(10.0, sht20_refresh_sec * 6.0))
+    if src == "AHT21":
+        ts = weather.get("aht21_ts", 0.0)
+        return _is_fresh(ts, max_age_sec=max(10.0, AHT21_REFRESH_SEC * 6.0))
     if src == "SWITCHBOT":
         if not use_switchbot_in:
             return False
