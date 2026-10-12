@@ -11,6 +11,7 @@ from pathlib import Path
 import pygame
 
 from config import (
+    AHT21_REFRESH_SEC,
     APP_VERSION,
     INFO_FONT_CANDIDATES,
     INDOOR_SOURCES,
