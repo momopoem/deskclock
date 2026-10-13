@@ -55,10 +55,13 @@ class AndroidTvRemoteStateReader:
 class TvPowerDelivery:
     """Serialize verified ON/OFF delivery without blocking the pygame loop.
 
-    A request is ignored until the current network state is known.  After a
-    SwitchBot command, polling starts after ``detect_delay_sec``.  One retry is
-    allowed only when the state is still known to be the opposite of the target
-    and at least ``retry_guard_sec`` has elapsed since the first command.
+    A known matching state skips delivery.  If the network state is temporarily
+    unavailable, delivery still sends the requested SwitchBot command once so
+    a transient Android TV Remote failure cannot suppress a light-session
+    command.  After a SwitchBot command, polling starts after
+    ``detect_delay_sec``.  One retry is allowed only when the state is known to
+    be the opposite of the target and at least ``retry_guard_sec`` has elapsed
+    since the first command.
     """
 
     def __init__(
@@ -128,8 +131,10 @@ class TvPowerDelivery:
             return
         current = self.read_state()
         if current is None:
-            self.log(f"[TV] command={target} skipped reason=state_unknown")
-            return
+            # The user explicitly prefers delivery over suppressing the TV
+            # command when Android TV Remote is temporarily unavailable.
+            # Do not retry while the state remains unknown.
+            self.log(f"[TV] command={target} state_unknown fallback=send_once")
         if current is target_on:
             self.log(f"[TV] command={target} skipped reason=already_{target.lower()}")
             return

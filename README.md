@@ -17,15 +17,15 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.4.1**
+- バージョン: **v2.4.2**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
-詳細資料はv2.4.1仕様です。
+詳細資料はv2.4.2仕様です。
 
-- `documents/DeskSideClock_基本設計書_v2.4.1.docx`
-- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.1.docx`
+- `documents/DeskSideClock_基本設計書_v2.4.2.docx`
+- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.2.docx`
 
 物理センサーの個別・一括診断と自動テストはソースに同梱しています。手順は[センサー診断ガイド](app/test/README.md)を参照してください。
 
@@ -101,7 +101,7 @@ face/                        顔登録・学習・単発認識（個人データ
 tests/                       pytestによる自動・回帰テスト
   fixtures/                   顔誤検出の回帰画像
 tools/                       検証補助（顔候補画像の検証など）
-documents/                   v2.4.1の基本設計書・ソフトウェア仕様書
+documents/                   v2.4.2の基本設計書・ソフトウェア仕様書
   assets/                     設計書に使用する実機画面・操作領域図
 fonts/                       同梱フォントとライセンス
 run-clock.sh                 systemdから呼び出す起動スクリプト
@@ -156,7 +156,7 @@ DESKCLOCK_TV_CERT_PATH=~/.config/deskclock/tv/client.pem
 DESKCLOCK_TV_KEY_PATH=~/.config/deskclock/tv/client.key
 ```
 
-テレビはSwitchBot APIの受付だけでは成功としません。送信から2秒後にネットワーク状態確認を始め、期待状態に至らない場合は、状態が明確に反対側で10秒以上経過している時だけ1回再送します。状態不明時は送信・再送をしません。
+テレビはSwitchBot APIの受付だけでは成功としません。送信から2秒後にネットワーク状態確認を始め、期待状態に至らない場合は、状態が明確に反対側で10秒以上経過している時だけ1回再送します。ネットワーク状態が一時的に不明でも、要求したON/OFF信号は1回送ります。この場合は状態不明のまま再送しません。
 
 ## 起動とテスト
 

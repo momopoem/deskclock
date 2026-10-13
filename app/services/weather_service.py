@@ -24,7 +24,7 @@ from config import (
 )
 
 _WEATHER_ICON_FONT_CACHE = {}
-OPEN_METEO_USER_AGENT = "DeskSideClock/2.4.1"
+OPEN_METEO_USER_AGENT = "DeskSideClock/2.4.2"
 
 
 def _open_meteo_url(query: str) -> str:

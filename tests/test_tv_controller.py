@@ -47,19 +47,25 @@ def test_delivery_skips_an_already_matching_state():
     assert messages == ["[TV] command=ON skipped reason=already_on"]
 
 
-def test_delivery_skips_an_unknown_state():
+def test_delivery_sends_once_when_state_is_unknown():
     sent = []
     messages = []
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: None,
+        detect_delay_sec=0,
+        timeout_sec=0,
         log=messages.append,
     )
 
     controller._deliver(False)
 
-    assert sent == []
-    assert messages == ["[TV] command=OFF skipped reason=state_unknown"]
+    assert sent == ["turnOff"]
+    assert messages == [
+        "[TV] command=OFF state_unknown fallback=send_once",
+        "[TV] command=OFF attempt=1 api_ok=True",
+        "[TV] command=OFF verification=failed attempts=1",
+    ]
 
 
 def test_superseded_delivery_never_sends_an_old_signal():
