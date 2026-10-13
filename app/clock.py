@@ -17,7 +17,7 @@ Desk Side Clock
 
 Product Name : Desk Side Clock
 Release Type : Product Version
-Version      : v2.4.2
+Version      : v2.4.3
 Status       : Release
 
 Notes:
@@ -746,7 +746,9 @@ def main():
         if sb_token and sb_secret and sb_tv_id and TV_HOST:
             tv_delivery = TvPowerDelivery(
                 lambda command: switchbot_tv_command(sb_token, sb_secret, sb_tv_id, command),
-                AndroidTvRemoteStateReader(TV_HOST, TV_CERT_PATH, TV_KEY_PATH),
+                AndroidTvRemoteStateReader(
+                    TV_HOST, TV_CERT_PATH, TV_KEY_PATH, log=_log_light_event,
+                ),
                 detect_delay_sec=TV_DETECT_DELAY_SEC,
                 poll_sec=TV_STATE_POLL_SEC,
                 retry_guard_sec=TV_RETRY_GUARD_SEC,

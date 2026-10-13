@@ -32,29 +32,32 @@ def test_request_queues_a_boolean_target_without_blocking():
     assert controller._requests.get_nowait()[0] is True
 
 
-def test_delivery_skips_an_already_matching_state():
+def test_delivery_sends_even_when_remote_service_is_already_started():
     sent = []
     messages = []
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: True,
+        detect_delay_sec=0,
         log=messages.append,
     )
 
     controller._deliver(True)
 
-    assert sent == []
-    assert messages == ["[TV] command=ON skipped reason=already_on"]
+    assert sent == ["turnOn"]
+    assert messages == [
+        "[TV] command=ON attempt=1 api_ok=True",
+        "[TV] command=ON remote_service_started=True panel_state=not_observable",
+    ]
 
 
-def test_delivery_sends_once_when_state_is_unknown():
+def test_delivery_sends_once_when_remote_service_is_unknown():
     sent = []
     messages = []
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: None,
         detect_delay_sec=0,
-        timeout_sec=0,
         log=messages.append,
     )
 
@@ -62,10 +65,24 @@ def test_delivery_sends_once_when_state_is_unknown():
 
     assert sent == ["turnOff"]
     assert messages == [
-        "[TV] command=OFF state_unknown fallback=send_once",
         "[TV] command=OFF attempt=1 api_ok=True",
-        "[TV] command=OFF verification=failed attempts=1",
+        "[TV] command=OFF remote_service_started=None panel_state=not_observable",
     ]
+
+
+def test_delivery_does_not_retry_when_remote_service_reports_the_opposite():
+    sent = []
+    controller = TvPowerDelivery(
+        lambda command: sent.append(command) or True,
+        lambda: False,
+        detect_delay_sec=0,
+        retry_guard_sec=0,
+        timeout_sec=0,
+    )
+
+    controller._deliver(True)
+
+    assert sent == ["turnOn"]
 
 
 def test_superseded_delivery_never_sends_an_old_signal():

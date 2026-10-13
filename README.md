@@ -17,15 +17,15 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.4.2**
+- バージョン: **v2.4.3**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
-詳細資料はv2.4.2仕様です。
+詳細資料はv2.4.3仕様です。
 
-- `documents/DeskSideClock_基本設計書_v2.4.2.docx`
-- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.2.docx`
+- `documents/DeskSideClock_基本設計書_v2.4.3.docx`
+- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.3.docx`
 
 物理センサーの個別・一括診断と自動テストはソースに同梱しています。手順は[センサー診断ガイド](app/test/README.md)を参照してください。
 
@@ -101,7 +101,7 @@ face/                        顔登録・学習・単発認識（個人データ
 tests/                       pytestによる自動・回帰テスト
   fixtures/                   顔誤検出の回帰画像
 tools/                       検証補助（顔候補画像の検証など）
-documents/                   v2.4.2の基本設計書・ソフトウェア仕様書
+documents/                   v2.4.3の基本設計書・ソフトウェア仕様書
   assets/                     設計書に使用する実機画面・操作領域図
 fonts/                       同梱フォントとライセンス
 run-clock.sh                 systemdから呼び出す起動スクリプト
@@ -144,7 +144,7 @@ SwitchBot Open APIは公式文書上、個人利用向けです。商用利用�
 
 ### 書斎テレビの連動
 
-`DESKCLOCK_TV_ENABLE=1` を設定すると、表示・照明と同じプレゼンスセッションに書斎テレビを連動させます。PIRで照明をONにする時はテレビもON、30秒フェード終了後に照明をOFFにする時はテレビもOFFを要求します。起動時にはテレビの状態を変えません。
+`DESKCLOCK_TV_ENABLE=1` を設定すると、表示・照明と同じプレゼンスセッションに書斎テレビを連動させます。PIRで照明をONにする時はテレビもON、30秒フェード終了後に照明をOFFにする時はテレビもOFFを要求します。起動時にはテレビの状態を変えません。Android TV Remote の接続状態は画面点灯状態を表さないため、状態が一致しているとしてテレビのON/OFFコマンドを抑止しません。SwitchBot の明示的なON/OFFコマンドをセッションごとに一度送信し、Remote 接続は通信診断としてのみログに残します。
 
 テレビ用のSwitchBot赤外線仮想リモコンと、Android TV Remote v2のペアリング証明書が必要です。証明書はGit管理せず、既定では次の場所に置きます。
 

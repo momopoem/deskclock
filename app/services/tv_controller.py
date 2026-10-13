@@ -1,9 +1,10 @@
-"""Verified SwitchBot power delivery for the desk television.
+"""SwitchBot power delivery for the desk television.
 
-The SwitchBot infrared API acknowledges delivery to the Hub, not whether the
-television changed state.  This worker therefore treats Android TV Remote v2
-as the source of truth.  It is deliberately independent from LightOnDelivery:
-repeating an infrared TV command blindly could undo a successful toggle.
+Android TV Remote v2 reports its remote-control service state, not whether
+the panel is lit.  It may therefore remain reachable while the TV screen is
+off.  The presence-session request is the authority for delivery: send its
+explicit SwitchBot ON/OFF command once, then record remote-service
+reachability only as diagnostics.
 """
 from __future__ import annotations
 
@@ -21,20 +22,34 @@ SwitchBotSender = Callable[[str], bool]
 
 
 class AndroidTvRemoteStateReader:
-    """Read an Android/Google TV standby state using its paired certificate."""
+    """Read Android/Google TV remote-service reachability using its certificate."""
 
-    def __init__(self, host: str, cert_path: str, key_path: str, *, name: str = "Desk Side Clock"):
+    def __init__(
+        self,
+        host: str,
+        cert_path: str,
+        key_path: str,
+        *,
+        name: str = "Desk Side Clock",
+        timeout_sec: float = 5.0,
+        log: Callable[[str], None] | None = None,
+    ):
         self.host = host
         self.cert_path = cert_path
         self.key_path = key_path
         self.name = name
+        self.timeout_sec = float(timeout_sec)
+        self.log = log or logging.getLogger(__name__).info
 
     def __call__(self) -> bool | None:
         if not self.host or not Path(self.cert_path).is_file() or not Path(self.key_path).is_file():
             return None
+        started_at = time.monotonic()
         try:
             return asyncio.run(self._read())
-        except Exception:
+        except Exception as exc:
+            elapsed_ms = int((time.monotonic() - started_at) * 1000)
+            self.log(f"[TV] remote_service=unknown error={type(exc).__name__} elapsed_ms={elapsed_ms}")
             return None
 
     async def _read(self) -> bool | None:
@@ -46,22 +61,18 @@ class AndroidTvRemoteStateReader:
             self.name, self.cert_path, self.key_path, self.host, enable_voice=False,
         )
         try:
-            await remote.async_connect()
+            await asyncio.wait_for(remote.async_connect(), timeout=self.timeout_sec)
             return bool(remote.is_on)
         finally:
             remote.disconnect()
 
 
 class TvPowerDelivery:
-    """Serialize verified ON/OFF delivery without blocking the pygame loop.
+    """Serialize one explicit TV command per presence-session request.
 
-    A known matching state skips delivery.  If the network state is temporarily
-    unavailable, delivery still sends the requested SwitchBot command once so
-    a transient Android TV Remote failure cannot suppress a light-session
-    command.  After a SwitchBot command, polling starts after
-    ``detect_delay_sec``.  One retry is allowed only when the state is known to
-    be the opposite of the target and at least ``retry_guard_sec`` has elapsed
-    since the first command.
+    ``read_state`` is intentionally diagnostic only.  Android TV Remote's
+    ``is_on`` is the remote-control service status, so it must never suppress
+    an explicit SwitchBot ``turnOn`` or ``turnOff`` request.
     """
 
     def __init__(
@@ -78,6 +89,9 @@ class TvPowerDelivery:
         self.send_command = send_command
         self.read_state = read_state
         self.detect_delay_sec = float(detect_delay_sec)
+        # Retained as constructor arguments to keep existing configuration
+        # compatible.  Remote state is not a panel-state verifier, so polling
+        # and retry guards are deliberately not used for command decisions.
         self.poll_sec = float(poll_sec)
         self.retry_guard_sec = float(retry_guard_sec)
         self.timeout_sec = float(timeout_sec)
@@ -129,54 +143,18 @@ class TvPowerDelivery:
         if generation is not None and self._superseded(generation):
             self.log(f"[TV] command={target} cancelled reason=superseded")
             return
-        current = self.read_state()
-        if current is None:
-            # The user explicitly prefers delivery over suppressing the TV
-            # command when Android TV Remote is temporarily unavailable.
-            # Do not retry while the state remains unknown.
-            self.log(f"[TV] command={target} state_unknown fallback=send_once")
-        if current is target_on:
-            self.log(f"[TV] command={target} skipped reason=already_{target.lower()}")
+        accepted = self.send_command("turnOn" if target_on else "turnOff")
+        self.log(f"[TV] command={target} attempt=1 api_ok={accepted}")
+        if not accepted:
             return
 
-        command_at = time.monotonic()
-        attempts = 0
-        while attempts < 2:
-            if generation is not None and self._superseded(generation):
-                self.log(f"[TV] command={target} cancelled reason=superseded")
-                return
-            attempts += 1
-            accepted = self.send_command("turnOn" if target_on else "turnOff")
-            self.log(f"[TV] command={target} attempt={attempts} api_ok={accepted}")
-            if not accepted:
-                return
-
-            poll_at = time.monotonic() + self.detect_delay_sec
-            retry_at = command_at + self.retry_guard_sec
-            deadline = command_at + self.timeout_sec
-            last_state: bool | None = current
-            while time.monotonic() < deadline:
-                if generation is not None and self._superseded(generation):
-                    self.log(f"[TV] command={target} cancelled reason=superseded")
-                    return
-                wait_until = min(poll_at, deadline)
-                time.sleep(max(0.0, wait_until - time.monotonic()))
-                if time.monotonic() >= deadline:
-                    break
-                last_state = self.read_state()
-                if last_state is target_on:
-                    self.log(f"[TV] command={target} verification=confirmed attempts={attempts}")
-                    return
-                if last_state is None:
-                    self.log(f"[TV] command={target} verification=state_unknown")
-                    return
-                if attempts == 1 and time.monotonic() >= retry_at:
-                    break
-                poll_at = time.monotonic() + self.poll_sec
-
-            if attempts == 1 and last_state is (not target_on):
-                # Keep at least the tested OFF->ON guard interval between IR signals.
-                time.sleep(max(0.0, retry_at - time.monotonic()))
-                continue
-            break
-        self.log(f"[TV] command={target} verification=failed attempts={attempts}")
+        if self.detect_delay_sec > 0:
+            time.sleep(self.detect_delay_sec)
+        if generation is not None and self._superseded(generation):
+            self.log(f"[TV] command={target} observation=cancelled reason=superseded")
+            return
+        remote_service_started = self.read_state()
+        self.log(
+            f"[TV] command={target} remote_service_started={remote_service_started} "
+            "panel_state=not_observable"
+        )
