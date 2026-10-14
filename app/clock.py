@@ -636,10 +636,18 @@ def fetch_internet_loop(shared, stop_event):
 def main():
     pygame.init()
 
-    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    # Do not let SDL choose an implicit full-screen size.  After an HDMI
+    # power-cycle, Wayland can report a larger logical surface for ``(0, 0)``;
+    # the compositor then downscales it and changes the effective UI pitch.
+    # Use the active desktop dimensions explicitly so the layout remains
+    # stable across display OFF/ON transitions.
+    desktop_sizes = pygame.display.get_desktop_sizes()
+    display_size = desktop_sizes[0] if desktop_sizes else (0, 0)
+    screen = pygame.display.set_mode(display_size, pygame.FULLSCREEN)
     pygame.mouse.set_visible(False)
 
     sw, sh = screen.get_size()
+    print(f"[UI] display={sw}x{sh} configured={display_size[0]}x{display_size[1]} ui_scale={UI_SCALE}")
 
     renderer = ClockRenderer(screen=screen, sw=sw, sh=sh)
 
