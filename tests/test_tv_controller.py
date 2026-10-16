@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -79,61 +79,88 @@ def test_delivery_skips_a_power_confirmed_matching_state():
     assert messages == ["[TV] command=ON skipped reason=already_on"]
 
 
-def test_delivery_confirms_after_two_power_samples():
+def test_delivery_confirms_two_seconds_after_first_signal():
     sent = []
     messages = []
-    samples = iter([False, True, True])
+    samples = iter([False, True])
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
-        detect_delay_sec=0,
-        poll_sec=0,
-        confirm_samples=2,
+        log=messages.append,
+    )
+
+    with patch("services.tv_controller.time.sleep") as sleep:
+        controller._deliver(True)
+
+    assert sent == ["turnOn"]
+    sleep.assert_called_once_with(2.0)
+    assert messages[-1] == "[TV] command=ON verification=confirmed attempts=1"
+
+
+def test_delivery_skips_when_initial_power_state_is_unknown():
+    sent = []
+    messages = []
+    controller = TvPowerDelivery(
+        lambda command: sent.append(command) or True,
+        lambda: None,
         log=messages.append,
     )
 
     controller._deliver(True)
 
-    assert sent == ["turnOn"]
-    assert messages[-1] == "[TV] command=ON verification=confirmed attempts=1"
+    assert sent == []
+    assert messages == ["[TV] command=ON skipped reason=state_unknown"]
 
 
-def test_delivery_sends_once_when_initial_power_state_is_unknown():
+def test_delivery_retries_once_after_two_second_opposite_power_state():
     sent = []
-    samples = iter([None, True])
-    controller = TvPowerDelivery(
-        lambda command: sent.append(command) or True,
-        lambda: next(samples),
-        detect_delay_sec=0,
-        poll_sec=0,
-        confirm_samples=1,
-    )
-
-    controller._deliver(True)
-
-    assert sent == ["turnOn"]
-
-
-def test_delivery_retries_once_after_confirmed_opposite_power_state():
-    sent = []
+    messages = []
     samples = iter([False, False, True])
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
-        detect_delay_sec=0,
-        poll_sec=0,
-        retry_guard_sec=10,
-        timeout_sec=30,
-        confirm_samples=1,
+        log=messages.append,
     )
-    # command_at=0; the first observation is still OFF at the retry guard.
-    monotonic = iter([0.0, 0.0, 10.0, 10.0, 10.0])
-    with patch("services.tv_controller.time.monotonic", side_effect=lambda: next(monotonic)), patch(
-        "services.tv_controller.time.sleep"
-    ):
+    with patch("services.tv_controller.time.sleep") as sleep:
         controller._deliver(True)
 
     assert sent == ["turnOn", "turnOn"]
+    assert sleep.call_args_list == [call(2.0), call(2.0)]
+    assert messages[-1] == "[TV] command=ON verification=confirmed attempts=2"
+
+
+def test_delivery_does_not_retry_when_first_two_second_read_is_unknown():
+    sent = []
+    messages = []
+    samples = iter([False, None])
+    controller = TvPowerDelivery(
+        lambda command: sent.append(command) or True,
+        lambda: next(samples),
+        log=messages.append,
+    )
+
+    with patch("services.tv_controller.time.sleep"):
+        controller._deliver(True)
+
+    assert sent == ["turnOn"]
+    assert messages[-1] == "[TV] command=ON verification=unknown attempts=1"
+
+
+def test_delivery_reports_failure_after_second_two_second_check_is_opposite():
+    sent = []
+    messages = []
+    samples = iter([False, False, False])
+    controller = TvPowerDelivery(
+        lambda command: sent.append(command) or True,
+        lambda: next(samples),
+        log=messages.append,
+    )
+
+    with patch("services.tv_controller.time.sleep"):
+        controller._deliver(True)
+
+    assert sent == ["turnOn", "turnOn"]
+    assert messages[-1] == "[TV] command=ON verification=failed attempts=2"
 
 
 def test_superseded_delivery_never_sends_an_old_signal():

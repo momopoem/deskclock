@@ -161,7 +161,11 @@ class AndroidTvRemoteStateReader:
 
 
 class TvPowerDelivery:
-    """Serialize infrared delivery and verify it from Plug Mini power draw."""
+    """Serialize toggle-IR delivery and verify it from Plug Mini power draw.
+
+    A clear Plug Mini state is required before each toggle.  This keeps an
+    unavailable or in-between power reading from accidentally reversing the TV.
+    """
 
     def __init__(
         self,
@@ -169,19 +173,11 @@ class TvPowerDelivery:
         read_state: TvStateReader,
         *,
         detect_delay_sec: float = 2.0,
-        poll_sec: float = 2.0,
-        retry_guard_sec: float = 10.0,
-        timeout_sec: float = 30.0,
-        confirm_samples: int = 2,
         log: Callable[[str], None] | None = None,
     ):
         self.send_command = send_command
         self.read_state = read_state
         self.detect_delay_sec = float(detect_delay_sec)
-        self.poll_sec = float(poll_sec)
-        self.retry_guard_sec = float(retry_guard_sec)
-        self.timeout_sec = float(timeout_sec)
-        self.confirm_samples = max(1, int(confirm_samples))
         self.log = log or logging.getLogger(__name__).info
         self._requests: queue.Queue[tuple[bool, int] | None] = queue.Queue()
         self._thread: threading.Thread | None = None
@@ -229,47 +225,47 @@ class TvPowerDelivery:
             self.log(f"[TV] command={target} cancelled reason=superseded")
             return
         current = self.read_state()
+        if current is None:
+            self.log(f"[TV] command={target} skipped reason=state_unknown")
+            return
         if current is target_on:
             self.log(f"[TV] command={target} skipped reason=already_{target.lower()}")
             return
 
-        command_at = time.monotonic()
-        attempts = 0
-        last_state = current
-        while attempts < 2:
+        def deliver_attempt(attempt: int) -> bool:
             if generation is not None and self._superseded(generation):
                 self.log(f"[TV] command={target} cancelled reason=superseded")
-                return
-            attempts += 1
+                return False
             accepted = self.send_command("turnOn" if target_on else "turnOff")
-            self.log(f"[TV] command={target} attempt={attempts} api_ok={accepted}")
-            if not accepted:
-                return
+            self.log(f"[TV] command={target} attempt={attempt} api_ok={accepted}")
+            return bool(accepted)
 
-            deadline = command_at + self.timeout_sec
-            retry_at = command_at + self.retry_guard_sec
+        def verify_after_delay(attempts: int) -> bool | None:
             if self.detect_delay_sec > 0:
                 time.sleep(self.detect_delay_sec)
-            confirmations = 0
-            while time.monotonic() < deadline:
-                if generation is not None and self._superseded(generation):
-                    self.log(f"[TV] command={target} verification=cancelled reason=superseded")
-                    return
-                last_state = self.read_state()
-                if last_state is target_on:
-                    confirmations += 1
-                    if confirmations >= self.confirm_samples:
-                        self.log(f"[TV] command={target} verification=confirmed attempts={attempts}")
-                        return
-                else:
-                    confirmations = 0
-                if attempts == 1 and last_state is (not target_on) and time.monotonic() >= retry_at:
-                    break
-                if self.poll_sec > 0:
-                    time.sleep(self.poll_sec)
+            if generation is not None and self._superseded(generation):
+                self.log(f"[TV] command={target} verification=cancelled reason=superseded")
+                return None
+            observed = self.read_state()
+            if observed is target_on:
+                self.log(f"[TV] command={target} verification=confirmed attempts={attempts}")
+                return True
+            return observed
 
-            if attempts == 1 and last_state is (not target_on):
-                time.sleep(max(0.0, retry_at - time.monotonic()))
-                continue
-            break
-        self.log(f"[TV] command={target} verification=failed attempts={attempts}")
+        if not deliver_attempt(1):
+            return
+        first_check = verify_after_delay(1)
+        if first_check is True or first_check is None:
+            if first_check is None:
+                self.log(f"[TV] command={target} verification=unknown attempts=1")
+            return
+
+        # The first two readings were both clearly the opposite state, so one
+        # immediate retry is safe.  There are never more than two IR toggles.
+        if not deliver_attempt(2):
+            return
+        final_check = verify_after_delay(2)
+        if final_check is True:
+            return
+        outcome = "unknown" if final_check is None else "failed"
+        self.log(f"[TV] command={target} verification={outcome} attempts=2")

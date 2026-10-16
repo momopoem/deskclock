@@ -19,12 +19,18 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 __product__ = "Desk Side Clock"
-__version__ = "v2.4.5"
+__version__ = "v2.4.6"
 __status__ = "release"
 APP_VERSION = __version__
 
 UI_SCALE = 1.2
 I2C_LOCK = threading.Lock()
+
+# The installed TCL monitor runs at this native mode.  Do not derive the
+# rendering surface from a transient Wayland logical size after HDMI wake.
+DISPLAY_NATIVE_WIDTH = _env_int("DESKCLOCK_DISPLAY_NATIVE_WIDTH", 1920)
+DISPLAY_NATIVE_HEIGHT = _env_int("DESKCLOCK_DISPLAY_NATIVE_HEIGHT", 1200)
+DISPLAY_LAYOUT_RECOVERY_SEC = 3.0
 
 AHT21_ENABLE = True
 AHT21_I2C_BUS = 1
@@ -191,11 +197,7 @@ TV_KEY_PATH = os.path.expanduser(
 TV_PLUG_DEVICE_ID = os.environ.get("SWITCHBOT_tvPlugDeviceId", "")
 TV_POWER_ON_WATT = _env_float("DESKCLOCK_TV_POWER_ON_WATT", 20.0)
 TV_POWER_OFF_WATT = _env_float("DESKCLOCK_TV_POWER_OFF_WATT", 5.0)
-TV_POWER_CONFIRM_SAMPLES = _env_int("DESKCLOCK_TV_POWER_CONFIRM_SAMPLES", 2)
 TV_DETECT_DELAY_SEC = 2.0
-TV_STATE_POLL_SEC = 2.0
-TV_RETRY_GUARD_SEC = 10.0
-TV_COMMAND_TIMEOUT_SEC = 30.0
 LIGHT_PROBE_SEC = 8.0
 AUTHORIZED_USER_LIGHT_GRACE_SEC = 1800.0
 LIGHT_OFF_TIMEOUT_SEC = 300.0

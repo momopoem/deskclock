@@ -17,7 +17,7 @@ Desk Side Clock
 
 Product Name : Desk Side Clock
 Release Type : Product Version
-Version      : v2.4.5
+Version      : v2.4.6
 Status       : Release
 
 Notes:
@@ -636,13 +636,10 @@ def fetch_internet_loop(shared, stop_event):
 def main():
     pygame.init()
 
-    # Do not let SDL choose an implicit full-screen size.  After an HDMI
-    # power-cycle, Wayland can report a larger logical surface for ``(0, 0)``;
-    # the compositor then downscales it and changes the effective UI pitch.
-    # Use the active desktop dimensions explicitly so the layout remains
-    # stable across display OFF/ON transitions.
-    desktop_sizes = pygame.display.get_desktop_sizes()
-    display_size = desktop_sizes[0] if desktop_sizes else (0, 0)
+    # The monitor's physical mode is deliberately fixed.  Wayland may expose
+    # a transient, larger logical desktop immediately after HDMI wake; using
+    # that value makes the compositor downscale the clock and shrink its text.
+    display_size = (DISPLAY_NATIVE_WIDTH, DISPLAY_NATIVE_HEIGHT)
     screen = pygame.display.set_mode(display_size, pygame.FULLSCREEN)
     pygame.mouse.set_visible(False)
 
@@ -764,10 +761,6 @@ def main():
                 lambda command: switchbot_tv_command(sb_token, sb_secret, sb_tv_id, command),
                 panel_state_reader,
                 detect_delay_sec=TV_DETECT_DELAY_SEC,
-                poll_sec=TV_STATE_POLL_SEC,
-                retry_guard_sec=TV_RETRY_GUARD_SEC,
-                timeout_sec=TV_COMMAND_TIMEOUT_SEC,
-                confirm_samples=TV_POWER_CONFIRM_SAMPLES,
                 log=_log_light_event,
             )
             _log_light_event(
@@ -779,9 +772,25 @@ def main():
     state["display_activity_mono"] = presence.last_motion
     _log_dpm_event(f"[PRESENCE] settings={presence.settings}")
 
+    layout_mismatch_since: float | None = None
     while running:
         color_changed = False
         now_mono = time.monotonic()
+        actual_display_size = screen.get_size()
+        if actual_display_size == display_size:
+            layout_mismatch_since = None
+        elif actual_display_size[0] > 0 and actual_display_size[1] > 0:
+            if layout_mismatch_since is None:
+                layout_mismatch_since = now_mono
+                print(
+                    "[UI] layout_mismatch "
+                    f"actual={actual_display_size[0]}x{actual_display_size[1]} "
+                    f"expected={display_size[0]}x{display_size[1]}"
+                )
+            elif now_mono - layout_mismatch_since >= DISPLAY_LAYOUT_RECOVERY_SEC:
+                print("[UI] layout_recovery=reexec reason=surface_size_mismatch")
+                pygame.quit()
+                os.execv(sys.executable, [sys.executable, *sys.argv])
         motion_detected = presence.update_pir(
             now_mono, bool(state.pir_value) and not state.pir_err
             and now_mono - state.pir_mono < 2.0)
