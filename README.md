@@ -22,10 +22,10 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
-詳細資料はv2.4.3仕様です。
+詳細資料はv2.4.6仕様です。
 
-- `documents/DeskSideClock_基本設計書_v2.4.3.docx`
-- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.3.docx`
+- `documents/DeskSideClock_基本設計書_v2.4.6.docx`
+- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.6.docx`
 
 物理センサーの個別・一括診断と自動テストはソースに同梱しています。手順は[センサー診断ガイド](app/test/README.md)を参照してください。
 
