@@ -17,7 +17,7 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.4.5**
+- バージョン: **v2.4.6**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
@@ -38,6 +38,7 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 - PIR人感センサーと照度センサーによる自動減光・画面消灯・復帰
 - 顔認識とSwitchBot Cloud APIを組み合わせた照明制御
 - 人感検知中の`turnOn`再送とBH1750による実点灯確認・不達再試行
+- 人感・照明の在席セッションに合わせたモニタ連動。SwitchBotプラグミニの消費電力で状態を確認し、赤外線トグルの誤作動を防止
 - NTP同期状態の監視
 - 状態選択の永続化
 
@@ -142,65 +143,6 @@ DESKCLOCK_FACE_LABEL
 ### SwitchBot Cloud API
 
 SwitchBot Open APIは公式文書上、個人利用向けです。商用利用または大規模利用では、事前にSwitchBotへ相談し、許諾・利用上限・契約条件を確認してください。トークン、シークレット、デバイスIDは非Git管理の環境ファイルから渡してください。
-
-### 書斎テレビの連動
-
-`DESKCLOCK_TV_ENABLE=1` を設定すると、表示・照明と同じプレゼンスセッションに書斎テレビを連動させます。PIRで照明をONにする時はテレビもON、30秒フェード終了後に照明をOFFにする時はテレビもOFFを要求します。起動時にはテレビの状態を変えません。
-
-テレビ用のSwitchBot赤外線仮想リモコンと、テレビ給電経路に設置したSwitchBotプラグミニが必要です。プラグミニのリレーは制御せず、常時ONのまま瞬時消費電力だけを読みます。要求開始時に電力を確認し、既に目的の状態なら赤外線は送信しません。明確に反対状態だった時だけ送信し、2秒後に再判定します。その時点でも明確に反対状態ならただちに1回だけ再送し、さらに2秒後に最終判定します。消費電力が閾値の中間、またはAPI取得不能ならトグルを誤って反転させないため送信・再送を行いません。
-
-```text
-SWITCHBOT_tvDeviceId=<テレビのSwitchBot仮想リモコンID>
-SWITCHBOT_tvPlugDeviceId=<テレビ給電用プラグミニのデバイスID>
-DESKCLOCK_TV_ENABLE=1
-DESKCLOCK_TV_POWER_ON_WATT=20.0
-DESKCLOCK_TV_POWER_OFF_WATT=5.0
-DESKCLOCK_DISPLAY_NATIVE_WIDTH=1920
-DESKCLOCK_DISPLAY_NATIVE_HEIGHT=1200
-```
-
-既定の閾値は、画面ONが20 W以上、スタンバイが5 W以下です。設置後は実測値を確認し、テレビのON/OFF値がこの範囲に収まらない場合のみ、環境ファイル側で閾値を調整してください。表示はTCL 43P636の物理解像度1920×1200で固定し、HDMI復帰時にSDLの描画面サイズが変わった場合は3秒後にプロセスを再初期化して、縮小表示を復旧します。トークン、シークレット、デバイスID、IPアドレスはGitに含めません。
-
-## 起動とテスト
-
-実機ではuser systemdサービスとして起動します。
-
-```bash
-systemctl --user enable --now deskclock.service
-systemctl --user status deskclock.service
-journalctl --user -u deskclock.service
-```
-
-依存関係がそろった開発環境では、次のコマンドでテストできます。
-
-```bash
-python -m unittest discover -s tests -v
-python -m compileall -q app tests
-```
-
-センサー診断スクリプトを実行する際は、DeskSide Clock本体と同じI²Cバスへ同時アクセスしないよう、必要に応じてサービスを停止してください。
-
-### 照明再送・点灯確認の実機テスト
-
-1. プロジェクトディレクトリで部屋を暗くし、`tail -f ./log/clock.log | grep --line-buffered '\[LGT\]'`を開きます。
-2. PIRの前で動き、`api_command=turnOn`の初回送信と、3秒後の`verification=repeat-turnOn`を確認します。
-3. 照明が点くと`verification=confirmed`と実測luxが記録されます。
-4. 不達を再現するには、SwitchBot Hubの赤外線送信部を一時的に遮ります。最大3回の`turnOn`後も暗い場合、`[LGT] 点灯確認失敗`が記録されます。
-
-赤外線を遮るテストではHubの電源を切らず、放熱口を塞がないでください。ログ上の`result=OK`はAPI受付成功、`verification=confirmed`はBH1750による実点灯確認を意味します。
-
-## 画面・照明の在席連動
-
-PIR入力を0.6秒連続して確認すると、時計画面と照明を同時にONにし、5分タイマーを開始します。
-その都度、非同期で顔認証を実行し、登録済みの認可済み利用者を認証した場合は認証時点から10分へ延長します。
-その後のPIR再検知は5分タイマーに戻し、認証も再実行します。
-
-タイマー満了時は時計を30秒間かけて減光します。減光中のPIR検知では通常表示へ戻り、5分タイマーを
-再開します。減光完了時だけ、画面OFFと照明の`turnOff`を同時に実行します。照度、時刻、独立した
-照明タイマーは照明命令を発行しません。
-
-`turnOn`は即時送信後に3秒後の再送、BH1750での点灯確認、未確認時の最大3回目までの再試行を行います。
-API受付と実点灯確認はログで個別に確認できます。
 
 ## 著作権・ライセンス
 
