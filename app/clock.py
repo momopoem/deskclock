@@ -17,7 +17,7 @@ Desk Side Clock
 
 Product Name : Desk Side Clock
 Release Type : Product Version
-Version      : v2.4.4
+Version      : v2.4.5
 Status       : Release
 
 Notes:
@@ -87,7 +87,7 @@ from utils.common import (
 from services.ntp_monitor import ntp_monitor_update
 from services.presence_controller import PresenceController, PresenceSettings, CameraCheckWorker
 from services.display_light_controller import DisplayLightController, LightOnDelivery
-from services.tv_controller import AndroidTvRemoteStateReader, TvPowerDelivery
+from services.tv_controller import SwitchBotPlugPowerReader, TvPowerDelivery, TvPowerStateReader
 from sensors import (
     _bh1750_read_lux,
     _sht20_read_temp_hum_via_i2c,
@@ -751,21 +751,31 @@ def main():
     )
     tv_delivery = None
     if TV_ENABLE:
-        if sb_token and sb_secret and sb_tv_id and TV_HOST:
+        if sb_token and sb_secret and sb_tv_id and TV_PLUG_DEVICE_ID:
+            panel_state_reader = TvPowerStateReader(
+                SwitchBotPlugPowerReader(
+                    sb_token, sb_secret, TV_PLUG_DEVICE_ID, log=_log_light_event,
+                ),
+                on_watt=TV_POWER_ON_WATT,
+                off_watt=TV_POWER_OFF_WATT,
+                log=_log_light_event,
+            )
             tv_delivery = TvPowerDelivery(
                 lambda command: switchbot_tv_command(sb_token, sb_secret, sb_tv_id, command),
-                AndroidTvRemoteStateReader(
-                    TV_HOST, TV_CERT_PATH, TV_KEY_PATH, log=_log_light_event,
-                ),
+                panel_state_reader,
                 detect_delay_sec=TV_DETECT_DELAY_SEC,
                 poll_sec=TV_STATE_POLL_SEC,
                 retry_guard_sec=TV_RETRY_GUARD_SEC,
                 timeout_sec=TV_COMMAND_TIMEOUT_SEC,
+                confirm_samples=TV_POWER_CONFIRM_SAMPLES,
                 log=_log_light_event,
             )
-            _log_light_event(f"[TV] enabled host={TV_HOST}")
+            _log_light_event(
+                "[TV] enabled panel_monitor=switchbot_plug "
+                f"on_watt={TV_POWER_ON_WATT:.1f} off_watt={TV_POWER_OFF_WATT:.1f}"
+            )
         else:
-            _log_light_event("[TV] disabled reason=missing_switchbot_or_host_configuration")
+            _log_light_event("[TV] disabled reason=missing_switchbot_or_plug_configuration")
     state["display_activity_mono"] = presence.last_motion
     _log_dpm_event(f"[PRESENCE] settings={presence.settings}")
 

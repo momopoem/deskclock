@@ -4,8 +4,22 @@ import os
 import threading
 from pathlib import Path
 
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
 __product__ = "Desk Side Clock"
-__version__ = "v2.4.4"
+__version__ = "v2.4.5"
 __status__ = "release"
 APP_VERSION = __version__
 
@@ -174,6 +188,10 @@ TV_CERT_PATH = os.path.expanduser(
 TV_KEY_PATH = os.path.expanduser(
     os.environ.get("DESKCLOCK_TV_KEY_PATH", "~/.config/deskclock/tv/client.key")
 )
+TV_PLUG_DEVICE_ID = os.environ.get("SWITCHBOT_tvPlugDeviceId", "")
+TV_POWER_ON_WATT = _env_float("DESKCLOCK_TV_POWER_ON_WATT", 20.0)
+TV_POWER_OFF_WATT = _env_float("DESKCLOCK_TV_POWER_OFF_WATT", 5.0)
+TV_POWER_CONFIRM_SAMPLES = _env_int("DESKCLOCK_TV_POWER_CONFIRM_SAMPLES", 2)
 TV_DETECT_DELAY_SEC = 2.0
 TV_STATE_POLL_SEC = 2.0
 TV_RETRY_GUARD_SEC = 10.0

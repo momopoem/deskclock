@@ -1,28 +1,121 @@
-"""SwitchBot power delivery for the desk television.
+"""Verified SwitchBot infrared delivery for the desk television.
 
-Android TV Remote v2 reports its remote-control service state, not whether
-the panel is lit.  It may therefore remain reachable while the TV screen is
-off.  The presence-session request is the authority for delivery: send its
-explicit SwitchBot ON/OFF command once, then record remote-service
-reachability only as diagnostics.
+The television stays powered from the mains. Its SwitchBot virtual remote only
+transmits infrared commands; a separate SwitchBot Plug Mini measures the
+television's real-time draw and verifies the panel state. Network reachability
+and Android TV Remote state are not used to infer whether the panel is lit.
 """
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import hmac
+import json
 import logging
 import queue
 import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 
 TvStateReader = Callable[[], bool | None]
 SwitchBotSender = Callable[[str], bool]
+PowerReader = Callable[[], float | None]
+
+
+class SwitchBotPlugPowerReader:
+    """Read Plug Mini instantaneous power without ever controlling its relay."""
+
+    def __init__(
+        self,
+        token: str,
+        secret: str,
+        device_id: str,
+        *,
+        timeout_sec: float = 8.0,
+        log: Callable[[str], None] | None = None,
+    ):
+        self.token = token
+        self.secret = secret
+        self.device_id = device_id
+        self.timeout_sec = float(timeout_sec)
+        self.log = log or logging.getLogger(__name__).info
+
+    def __call__(self) -> float | None:
+        started_at = time.monotonic()
+        try:
+            timestamp = str(int(time.time() * 1000))
+            signature = base64.b64encode(
+                hmac.new(
+                    self.secret.encode("utf-8"),
+                    f"{self.token}{timestamp}".encode("utf-8"),
+                    hashlib.sha256,
+                ).digest()
+            ).decode("utf-8")
+            request = Request(
+                f"https://api.switch-bot.com/v1.1/devices/{self.device_id}/status",
+                headers={
+                    "Authorization": self.token,
+                    "t": timestamp,
+                    "nonce": "",
+                    "sign": signature,
+                    "Content-Type": "application/json",
+                },
+            )
+            with urlopen(request, timeout=self.timeout_sec) as response:
+                payload = json.load(response)
+            if payload.get("statusCode") != 100:
+                raise ValueError(f"api_status_{payload.get('statusCode')}")
+            watts = float(payload["body"]["weight"])
+            if watts < 0:
+                raise ValueError("negative_watts")
+            return watts
+        except Exception as exc:
+            elapsed_ms = int((time.monotonic() - started_at) * 1000)
+            self.log(f"[TV] plug_power=unknown error={type(exc).__name__} elapsed_ms={elapsed_ms}")
+            return None
+
+
+class TvPowerStateReader:
+    """Convert Plug Mini watts into a conservative panel ON/OFF state."""
+
+    def __init__(
+        self,
+        read_watts: PowerReader,
+        *,
+        on_watt: float,
+        off_watt: float,
+        log: Callable[[str], None] | None = None,
+    ):
+        if on_watt <= off_watt or off_watt < 0:
+            raise ValueError("on_watt must be greater than non-negative off_watt")
+        self.read_watts = read_watts
+        self.on_watt = float(on_watt)
+        self.off_watt = float(off_watt)
+        self.log = log or logging.getLogger(__name__).info
+
+    def __call__(self) -> bool | None:
+        watts = self.read_watts()
+        if watts is None:
+            return None
+        if watts >= self.on_watt:
+            state: bool | None = True
+            label = "on"
+        elif watts <= self.off_watt:
+            state = False
+            label = "off"
+        else:
+            state = None
+            label = "unknown"
+        self.log(f"[TV] plug_power_w={watts:.1f} panel_state={label}")
+        return state
 
 
 class AndroidTvRemoteStateReader:
-    """Read Android/Google TV remote-service reachability using its certificate."""
+    """Legacy remote-service diagnostic reader; not a panel-state reader."""
 
     def __init__(
         self,
@@ -68,12 +161,7 @@ class AndroidTvRemoteStateReader:
 
 
 class TvPowerDelivery:
-    """Serialize one explicit TV command per presence-session request.
-
-    ``read_state`` is intentionally diagnostic only.  Android TV Remote's
-    ``is_on`` is the remote-control service status, so it must never suppress
-    an explicit SwitchBot ``turnOn`` or ``turnOff`` request.
-    """
+    """Serialize infrared delivery and verify it from Plug Mini power draw."""
 
     def __init__(
         self,
@@ -84,17 +172,16 @@ class TvPowerDelivery:
         poll_sec: float = 2.0,
         retry_guard_sec: float = 10.0,
         timeout_sec: float = 30.0,
+        confirm_samples: int = 2,
         log: Callable[[str], None] | None = None,
     ):
         self.send_command = send_command
         self.read_state = read_state
         self.detect_delay_sec = float(detect_delay_sec)
-        # Retained as constructor arguments to keep existing configuration
-        # compatible.  Remote state is not a panel-state verifier, so polling
-        # and retry guards are deliberately not used for command decisions.
         self.poll_sec = float(poll_sec)
         self.retry_guard_sec = float(retry_guard_sec)
         self.timeout_sec = float(timeout_sec)
+        self.confirm_samples = max(1, int(confirm_samples))
         self.log = log or logging.getLogger(__name__).info
         self._requests: queue.Queue[tuple[bool, int] | None] = queue.Queue()
         self._thread: threading.Thread | None = None
@@ -102,7 +189,7 @@ class TvPowerDelivery:
         self._generation = 0
 
     def request(self, target_on: bool) -> None:
-        """Request a state transition; duplicate requests are coalesced by order."""
+        """Request a transition; newer desired state supersedes queued work."""
         with self._lock:
             self._generation += 1
             generation = self._generation
@@ -112,7 +199,6 @@ class TvPowerDelivery:
                 self._thread.start()
 
     def stop(self) -> None:
-        # Also cancel an in-flight verification before the process exits.
         with self._lock:
             self._generation += 1
             self._requests.put(None)
@@ -123,7 +209,6 @@ class TvPowerDelivery:
             if request is None:
                 return
             target, generation = request
-            # A newer desired state supersedes queued work before any signal is sent.
             while True:
                 try:
                     newer = self._requests.get_nowait()
@@ -143,18 +228,48 @@ class TvPowerDelivery:
         if generation is not None and self._superseded(generation):
             self.log(f"[TV] command={target} cancelled reason=superseded")
             return
-        accepted = self.send_command("turnOn" if target_on else "turnOff")
-        self.log(f"[TV] command={target} attempt=1 api_ok={accepted}")
-        if not accepted:
+        current = self.read_state()
+        if current is target_on:
+            self.log(f"[TV] command={target} skipped reason=already_{target.lower()}")
             return
 
-        if self.detect_delay_sec > 0:
-            time.sleep(self.detect_delay_sec)
-        if generation is not None and self._superseded(generation):
-            self.log(f"[TV] command={target} observation=cancelled reason=superseded")
-            return
-        remote_service_started = self.read_state()
-        self.log(
-            f"[TV] command={target} remote_service_started={remote_service_started} "
-            "panel_state=not_observable"
-        )
+        command_at = time.monotonic()
+        attempts = 0
+        last_state = current
+        while attempts < 2:
+            if generation is not None and self._superseded(generation):
+                self.log(f"[TV] command={target} cancelled reason=superseded")
+                return
+            attempts += 1
+            accepted = self.send_command("turnOn" if target_on else "turnOff")
+            self.log(f"[TV] command={target} attempt={attempts} api_ok={accepted}")
+            if not accepted:
+                return
+
+            deadline = command_at + self.timeout_sec
+            retry_at = command_at + self.retry_guard_sec
+            if self.detect_delay_sec > 0:
+                time.sleep(self.detect_delay_sec)
+            confirmations = 0
+            while time.monotonic() < deadline:
+                if generation is not None and self._superseded(generation):
+                    self.log(f"[TV] command={target} verification=cancelled reason=superseded")
+                    return
+                last_state = self.read_state()
+                if last_state is target_on:
+                    confirmations += 1
+                    if confirmations >= self.confirm_samples:
+                        self.log(f"[TV] command={target} verification=confirmed attempts={attempts}")
+                        return
+                else:
+                    confirmations = 0
+                if attempts == 1 and last_state is (not target_on) and time.monotonic() >= retry_at:
+                    break
+                if self.poll_sec > 0:
+                    time.sleep(self.poll_sec)
+
+            if attempts == 1 and last_state is (not target_on):
+                time.sleep(max(0.0, retry_at - time.monotonic()))
+                continue
+            break
+        self.log(f"[TV] command={target} verification=failed attempts={attempts}")

@@ -17,7 +17,7 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.4.4**
+- バージョン: **v2.4.5**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
@@ -120,6 +120,7 @@ SWITCHBOT_inDeviceId
 SWITCHBOT_outDeviceId
 SWITCHBOT_lightDeviceId
 SWITCHBOT_tvDeviceId
+SWITCHBOT_tvPlugDeviceId
 OPEN_METEO_LATITUDE
 OPEN_METEO_LONGITUDE
 OPEN_METEO_TIMEZONE
@@ -144,19 +145,20 @@ SwitchBot Open APIは公式文書上、個人利用向けです。商用利用�
 
 ### 書斎テレビの連動
 
-`DESKCLOCK_TV_ENABLE=1` を設定すると、表示・照明と同じプレゼンスセッションに書斎テレビを連動させます。PIRで照明をONにする時はテレビもON、30秒フェード終了後に照明をOFFにする時はテレビもOFFを要求します。起動時にはテレビの状態を変えません。Android TV Remote の接続状態は画面点灯状態を表さないため、状態が一致しているとしてテレビのON/OFFコマンドを抑止しません。SwitchBot の明示的なON/OFFコマンドをセッションごとに一度送信し、Remote 接続は通信診断としてのみログに残します。
+`DESKCLOCK_TV_ENABLE=1` を設定すると、表示・照明と同じプレゼンスセッションに書斎テレビを連動させます。PIRで照明をONにする時はテレビもON、30秒フェード終了後に照明をOFFにする時はテレビもOFFを要求します。起動時にはテレビの状態を変えません。
 
-テレビ用のSwitchBot赤外線仮想リモコンと、Android TV Remote v2のペアリング証明書が必要です。証明書はGit管理せず、既定では次の場所に置きます。
+テレビ用のSwitchBot赤外線仮想リモコンと、テレビ給電経路に設置したSwitchBotプラグミニが必要です。プラグミニのリレーは制御せず、常時ONのまま瞬時消費電力だけを読みます。赤外線コマンド送信から2秒後に電力を読み、ON/OFFそれぞれ2回連続で閾値を満たした時だけ実状態を確認します。1回目の赤外線送信から10秒以上経っても、実測が明確に反対状態なら1回だけ再送します。消費電力が閾値の中間、またはAPI取得不能なら確認失敗として記録し、トグルを誤って反転させないため再送しません。
 
 ```text
 SWITCHBOT_tvDeviceId=<テレビのSwitchBot仮想リモコンID>
+SWITCHBOT_tvPlugDeviceId=<テレビ給電用プラグミニのデバイスID>
 DESKCLOCK_TV_ENABLE=1
-DESKCLOCK_TV_HOST=<テレビの固定IPアドレス>
-DESKCLOCK_TV_CERT_PATH=~/.config/deskclock/tv/client.pem
-DESKCLOCK_TV_KEY_PATH=~/.config/deskclock/tv/client.key
+DESKCLOCK_TV_POWER_ON_WATT=20.0
+DESKCLOCK_TV_POWER_OFF_WATT=5.0
+DESKCLOCK_TV_POWER_CONFIRM_SAMPLES=2
 ```
 
-テレビはSwitchBot APIの受付だけでは成功としません。送信から2秒後にネットワーク状態確認を始め、期待状態に至らない場合は、状態が明確に反対側で10秒以上経過している時だけ1回再送します。ネットワーク状態が一時的に不明でも、要求したON/OFF信号は1回送ります。この場合は状態不明のまま再送しません。
+既定の閾値は、画面ONが20 W以上、スタンバイが5 W以下です。設置後は実測値を確認し、テレビのON/OFF値がこの範囲に収まらない場合のみ、環境ファイル側で閾値を調整してください。トークン、シークレット、デバイスID、IPアドレスはGitに含めません。
 
 ## 起動とテスト
 
