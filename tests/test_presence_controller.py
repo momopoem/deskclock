@@ -13,20 +13,18 @@ def test_short_pir_pulse_does_not_extend_presence():
     assert p.last_motion == 0
     p.update_pir(20, True)
     p.update_pir(20.7, True)
-    assert p.last_motion == 0
-    assert not p.confirm_motion(20.8, {'ok': True, 'doorway_motion': False})
-    assert p.last_motion == 0
-    assert p.confirm_motion(20.9, {'ok': True, 'doorway_motion': True})
-    assert p.last_motion == 20.9
+    assert p.last_motion == 20.7
     p.update_pir(40, True)
-    assert p.last_motion == 20.9
+    assert p.last_motion == 20.7
 
 
-def test_camera_failure_or_blocked_doorway_never_extends_presence():
+def test_camera_failure_or_no_face_does_not_retract_pir_presence():
     p = PresenceController(100)
-    assert not p.confirm_motion(200, {'ok': False, 'error': 'camera_open_failed'})
-    assert not p.confirm_motion(200, {'ok': True, 'doorway_motion': False})
-    assert p.last_motion == 100
+    p.update_pir(200, True)
+    assert p.update_pir(200.7, True)
+    p.record_camera(201, {'ok': False, 'error': 'camera_open_failed'})
+    p.record_camera(202, {'ok': True, 'found_face': False})
+    assert p.last_motion == 200.7
 
 
 def test_motion_without_faces_expires_after_five_minutes():
@@ -105,7 +103,7 @@ def test_requeued_camera_check_runs_after_current_check_finishes():
     calls = []
     entered, release = threading.Event(), threading.Event()
     def recognize(purpose):
-        assert purpose in {'idle', 'pir_motion'}
+        assert purpose in {'idle', 'pir_recognition'}
         calls.append(1)
         entered.set()
         release.wait(2)
@@ -126,17 +124,17 @@ def test_requeued_camera_check_runs_after_current_check_finishes():
         worker.close()
 
 
-def test_camera_worker_passes_doorway_purpose_to_checker():
+def test_camera_worker_passes_pir_recognition_purpose_to_checker():
     purposes = []
     def recognize(purpose):
         purposes.append(purpose)
         return {'ok': True, 'motion': True}
     worker = CameraCheckWorker(recognize)
     try:
-        assert worker.request(purpose='pir_motion')
+        assert worker.request(purpose='pir_recognition')
         worker.future.result(timeout=1)
-        assert worker.poll()['_purpose'] == 'pir_motion'
-        assert purposes == ['pir_motion']
+        assert worker.poll()['_purpose'] == 'pir_recognition'
+        assert purposes == ['pir_recognition']
     finally:
         worker.close()
 

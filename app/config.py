@@ -156,16 +156,9 @@ DISPLAY_FACE_CHECK_IDLE_SEC = 30.0
 DISPLAY_FACE_CHECK_INTERVAL_SEC = 60.0
 DISPLAY_FACE_MISSES_REQUIRED = 3
 DISPLAY_CAMERA_FAILURE_GRACE_SEC = 120.0
-# A PIR edge alone does not start or prolong a display session. The camera
-# must also observe movement in the user-selected doorway region (E2:E5 in a
-# 8x6 calibration grid). Fractions survive a camera-resolution change.
-DISPLAY_DOORWAY_MOTION_REQUIRED = True
-DISPLAY_DOORWAY_ROI = (4 / 8, 1 / 6, 5 / 8, 5 / 6)  # E2 through E5
-DISPLAY_DOORWAY_FRAMES = 4
-DISPLAY_DOORWAY_FRAME_INTERVAL_SEC = 0.15
-DISPLAY_DOORWAY_MIN_CHANGED_RATIO = 0.015
-DISPLAY_DOORWAY_MAX_CHANGED_RATIO = 0.45
-DISPLAY_DOORWAY_MIN_ACTIVE_BANDS = 2
+# PIR is the immediate five-minute presence signal. The camera only
+# recognises Hiroshi to extend that already-active session to ten minutes;
+# it must never veto an ON-screen PIR refresh.
 DEBUG_SR501 = True
 SR501_DOT_RADIUS = 6
 SR501_DOT_MARGIN = 10

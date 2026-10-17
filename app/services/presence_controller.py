@@ -42,27 +42,16 @@ class PresenceController:
             self.high_since = now
         if now - self.high_since >= self.settings.pir_confirm_sec:
             if not self.accepted:
-                self.log('motion=candidate')
+                self.log('motion=accepted source=pir')
                 newly_accepted = True
             else:
                 newly_accepted = False
             self.accepted = True
+            if newly_accepted:
+                self.last_motion = now
+                self.misses = 0
             return newly_accepted
         return False
-
-    def confirm_motion(self, now, result):
-        """Accept a PIR candidate only when the doorway camera confirms it."""
-        doorway = result.get('doorway_detail', result)
-        if not doorway.get('ok'):
-            self.log(f"motion=rejected reason=camera_error error={doorway.get('error', 'invalid_result')}")
-            return False
-        if doorway.get('motion', result.get('doorway_motion')) is not True:
-            self.log('motion=rejected reason=doorway_not_confirmed')
-            return False
-        self.last_motion = now
-        self.misses = 0
-        self.log('motion=accepted source=pir+doorway')
-        return True
 
     def touch(self, now):
         self.last_motion = now
