@@ -80,7 +80,13 @@ class SwitchBotPlugPowerReader:
 
 
 class TvPowerStateReader:
-    """Convert Plug Mini watts into a conservative panel ON/OFF state."""
+    """Classify a Plug Mini reading as a power *band*, not a final state.
+
+    A television can spend several seconds between its normal 50--65 W running
+    draw and its low standby draw.  Consequently callers must use a sequence
+    of these observations; one high or low measurement never proves a panel
+    state on its own.
+    """
 
     def __init__(
         self,
@@ -103,14 +109,14 @@ class TvPowerStateReader:
             return None
         if watts >= self.on_watt:
             state: bool | None = True
-            label = "on"
+            label = "high"
         elif watts <= self.off_watt:
             state = False
-            label = "off"
+            label = "low"
         else:
             state = None
-            label = "unknown"
-        self.log(f"[TV] plug_power_w={watts:.1f} panel_state={label}")
+            label = "middle"
+        self.log(f"[TV] plug_power_w={watts:.1f} power_band={label}")
         return state
 
 
@@ -161,10 +167,11 @@ class AndroidTvRemoteStateReader:
 
 
 class TvPowerDelivery:
-    """Serialize toggle-IR delivery and verify it from Plug Mini power draw.
+    """Serialize toggle-IR delivery and verify a power-transition trace.
 
-    Intermediate Plug Mini readings are re-sampled before another toggle is
-    sent. This avoids reversing a transition which has already started.
+    The learned infrared power key is a toggle in practice.  A retry is only
+    safe after a complete observation window ends in a stable opposite band;
+    a delayed fall or rise must never be mistaken for an immediate failure.
     """
 
     def __init__(
@@ -175,7 +182,8 @@ class TvPowerDelivery:
         detect_delay_sec: float = 2.0,
         on_max_attempts: int = 10,
         off_max_attempts: int = 10,
-        settle_reads: int = 5,
+        settle_reads: int = 6,
+        confirm_reads: int = 2,
         log: Callable[[str], None] | None = None,
     ):
         self.send_command = send_command
@@ -183,7 +191,8 @@ class TvPowerDelivery:
         self.detect_delay_sec = float(detect_delay_sec)
         self.on_max_attempts = max(1, int(on_max_attempts))
         self.off_max_attempts = max(1, int(off_max_attempts))
-        self.settle_reads = max(1, int(settle_reads))
+        self.settle_reads = max(2, int(settle_reads))
+        self.confirm_reads = max(2, int(confirm_reads))
         self.log = log or logging.getLogger(__name__).info
         self._requests: queue.Queue[tuple[bool, int] | None] = queue.Queue()
         self._thread: threading.Thread | None = None
@@ -230,8 +239,10 @@ class TvPowerDelivery:
         if generation is not None and self._superseded(generation):
             self.log(f"[TV] command={target} cancelled reason=superseded")
             return
-        current = self._wait_for_known_state(target, generation, phase="initial")
-        if current is target_on:
+        initial, _ = self._observe_trace(
+            target_on, target, generation, phase="initial", early_opposite=True,
+        )
+        if initial == "target":
             self.log(f"[TV] command={target} skipped reason=already_{target.lower()}")
             return
 
@@ -243,54 +254,93 @@ class TvPowerDelivery:
             self.log(f"[TV] command={target} attempt={attempt} api_ok={accepted}")
             return bool(accepted)
 
-        def verify_after_delay(attempts: int) -> tuple[bool, bool | None]:
-            if self.detect_delay_sec > 0:
-                time.sleep(self.detect_delay_sec)
-            if generation is not None and self._superseded(generation):
-                self.log(f"[TV] command={target} verification=cancelled reason=superseded")
-                return False, None
-            observed = self._wait_for_known_state(target, generation, phase="verify", already_delayed=True)
-            if observed is target_on:
-                self.log(f"[TV] command={target} verification=confirmed attempts={attempts}")
-                return True, observed
-            return False, observed
-
         max_attempts = self.on_max_attempts if target_on else self.off_max_attempts
         for attempt in range(1, max_attempts + 1):
             if not deliver_attempt(attempt):
                 return
-            confirmed, observed = verify_after_delay(attempt)
-            if confirmed:
+            outcome, trace = self._observe_trace(target_on, target, generation, phase="verify")
+            if outcome == "cancelled":
                 return
-            if observed is None:
-                self.log(f"[TV] command={target} verification=unresolved attempts={attempt}")
+            if outcome == "target":
+                self.log(f"[TV] command={target} verification=confirmed attempts={attempt}")
                 return
-            # Send another toggle only after the Plug Mini has confirmed the
-            # opposite state. This is safe for the learned toggle command.
+            if outcome == "inconclusive":
+                # Do not turn an unclear, possibly still-moving transition into
+                # a second toggle.  Observe it once more before giving up.
+                outcome, trace = self._observe_trace(target_on, target, generation, phase="settle")
+                if outcome == "cancelled":
+                    return
+                if outcome == "target":
+                    self.log(f"[TV] command={target} verification=confirmed attempts={attempt}")
+                    return
+            if outcome != "opposite":
+                self.log(
+                    f"[TV] command={target} verification=unresolved attempts={attempt} "
+                    f"trace={self._format_trace(trace)}"
+                )
+                return
+            # Send another toggle only after the entire observation window has
+            # ended in a stable opposite band.
             if attempt < max_attempts:
                 continue
             self.log(f"[TV] command={target} verification=failed attempts={attempt}")
 
-    def _wait_for_known_state(
+    def _observe_trace(
         self,
+        target_on: bool,
         target: str,
         generation: int | None,
         *,
         phase: str,
-        already_delayed: bool = False,
-    ) -> bool | None:
-        """Return a stable Plug Mini state, allowing a bounded transition time."""
+        early_opposite: bool = False,
+    ) -> tuple[str, list[bool | None]]:
+        """Observe a bounded transition and return target/opposite/inconclusive.
+
+        ``True`` is the sustained running-power band, ``False`` the sustained
+        low-power band, and ``None`` a transition/middle reading.  The values
+        are deliberately evaluated as a trace rather than an absolute state.
+        """
+        trace: list[bool | None] = []
         for probe in range(1, self.settle_reads + 1):
             if generation is not None and self._superseded(generation):
                 self.log(f"[TV] command={target} {phase}=cancelled reason=superseded")
-                return None
-            if probe > 1 or not already_delayed:
-                if self.detect_delay_sec > 0:
-                    time.sleep(self.detect_delay_sec)
+                return "cancelled", trace
+            if self.detect_delay_sec > 0:
+                time.sleep(self.detect_delay_sec)
             observed = self.read_state()
-            if observed is not None:
-                if probe > 1:
-                    self.log(f"[TV] command={target} {phase}=settled probes={probe}")
-                return observed
-        self.log(f"[TV] command={target} {phase}=unknown probes={self.settle_reads}")
-        return None
+            trace.append(observed)
+            self.log(
+                f"[TV] command={target} {phase}=sample probe={probe} "
+                f"band={self._band_label(observed)}"
+            )
+            if self._has_stable_tail(trace, target_on):
+                self.log(
+                    f"[TV] command={target} {phase}=target trace={self._format_trace(trace)}"
+                )
+                return "target", trace
+            if early_opposite and self._has_stable_tail(trace, not target_on):
+                self.log(
+                    f"[TV] command={target} {phase}=opposite trace={self._format_trace(trace)}"
+                )
+                return "opposite", trace
+
+        if self._has_stable_tail(trace, not target_on):
+            self.log(
+                f"[TV] command={target} {phase}=opposite trace={self._format_trace(trace)}"
+            )
+            return "opposite", trace
+        self.log(f"[TV] command={target} {phase}=inconclusive trace={self._format_trace(trace)}")
+        return "inconclusive", trace
+
+    def _has_stable_tail(self, trace: list[bool | None], state: bool) -> bool:
+        return len(trace) >= self.confirm_reads and all(
+            item is state for item in trace[-self.confirm_reads:]
+        )
+
+    @staticmethod
+    def _band_label(state: bool | None) -> str:
+        return "high" if state is True else "low" if state is False else "middle"
+
+    @classmethod
+    def _format_trace(cls, trace: list[bool | None]) -> str:
+        return ">".join(cls._band_label(item) for item in trace)

@@ -815,11 +815,13 @@ def main():
                 on_max_attempts=TV_ON_MAX_ATTEMPTS,
                 off_max_attempts=TV_OFF_MAX_ATTEMPTS,
                 settle_reads=TV_POWER_SETTLE_READS,
+                confirm_reads=TV_POWER_CONFIRM_READS,
                 log=_log_light_event,
             )
             _log_light_event(
                 "[TV] enabled panel_monitor=switchbot_plug "
-                f"on_watt={TV_POWER_ON_WATT:.1f} off_watt={TV_POWER_OFF_WATT:.1f}"
+                f"high_band={TV_POWER_ON_WATT:.1f} low_band={TV_POWER_OFF_WATT:.1f} "
+                f"trace_reads={TV_POWER_SETTLE_READS} confirm_reads={TV_POWER_CONFIRM_READS}"
             )
         else:
             _log_light_event("[TV] disabled reason=missing_switchbot_or_plug_configuration")

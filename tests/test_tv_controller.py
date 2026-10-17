@@ -31,15 +31,15 @@ def test_plug_reader_extracts_instantaneous_watts_and_closes_response():
     assert "/devices/device-id/status" in get.call_args.args[0].full_url
 
 
-def test_power_state_reader_uses_hysteresis_and_reports_middle_as_unknown():
+def test_power_state_reader_reports_a_middle_transition_band():
     messages = []
     reader = TvPowerStateReader(lambda: 12.0, on_watt=20.0, off_watt=5.0, log=messages.append)
 
     assert reader() is None
-    assert messages == ["[TV] plug_power_w=12.0 panel_state=unknown"]
+    assert messages == ["[TV] plug_power_w=12.0 power_band=middle"]
 
 
-def test_power_state_reader_accepts_six_watts_as_off_when_configured():
+def test_power_state_reader_reports_low_band_when_configured():
     reader = TvPowerStateReader(lambda: 6.0, on_watt=20.0, off_watt=6.0)
 
     assert reader() is False
@@ -70,28 +70,30 @@ def test_request_queues_a_boolean_target_without_blocking():
     assert controller._requests.get_nowait()[0] is True
 
 
-def test_delivery_skips_a_power_confirmed_matching_state():
+def test_delivery_skips_only_after_two_matching_power_samples():
     sent = []
     messages = []
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: True,
+        settle_reads=2,
         log=messages.append,
     )
 
     controller._deliver(True)
 
     assert sent == []
-    assert messages == ["[TV] command=ON skipped reason=already_on"]
+    assert messages[-1] == "[TV] command=ON skipped reason=already_on"
 
 
-def test_delivery_confirms_two_seconds_after_first_signal():
+def test_delivery_confirms_after_a_trace_of_two_high_samples():
     sent = []
     messages = []
-    samples = iter([False, True])
+    samples = iter([False, False, None, True, True])
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
+        settle_reads=3,
         log=messages.append,
     )
 
@@ -99,14 +101,67 @@ def test_delivery_confirms_two_seconds_after_first_signal():
         controller._deliver(True)
 
     assert sent == ["turnOn"]
-    assert sleep.call_args_list == [call(2.0), call(2.0)]
+    assert sleep.call_args_list == [call(2.0)] * 5
     assert messages[-1] == "[TV] command=ON verification=confirmed attempts=1"
 
 
-def test_delivery_waits_for_initial_unknown_power_state_to_settle():
+def test_delivery_waits_through_middle_transition_before_confirming_off():
     sent = []
     messages = []
-    samples = iter([None, None, False, True])
+    samples = iter([True, True, True, None, False, False])
+    controller = TvPowerDelivery(
+        lambda command: sent.append(command) or True,
+        lambda: next(samples),
+        settle_reads=4,
+        log=messages.append,
+    )
+
+    with patch("services.tv_controller.time.sleep"):
+        controller._deliver(False)
+
+    assert sent == ["turnOff"]
+    assert "[TV] command=OFF verify=target trace=high>middle>low>low" in messages
+
+
+def test_delivery_retries_only_after_a_complete_opposite_trace():
+    sent = []
+    messages = []
+    samples = iter([False, False, False, False, False, True, True])
+    controller = TvPowerDelivery(
+        lambda command: sent.append(command) or True,
+        lambda: next(samples),
+        settle_reads=3,
+        log=messages.append,
+    )
+    with patch("services.tv_controller.time.sleep") as sleep:
+        controller._deliver(True)
+
+    assert sent == ["turnOn", "turnOn"]
+    assert messages[-1] == "[TV] command=ON verification=confirmed attempts=2"
+
+
+def test_delivery_observes_a_delayed_low_transition_without_a_second_toggle():
+    sent = []
+    messages = []
+    samples = iter([True, True, True, None, False, False])
+    controller = TvPowerDelivery(
+        lambda command: sent.append(command) or True,
+        lambda: next(samples),
+        settle_reads=4,
+        log=messages.append,
+    )
+
+    with patch("services.tv_controller.time.sleep"):
+        controller._deliver(False)
+
+    assert sent == ["turnOff"]
+    assert "[TV] command=OFF verification=confirmed attempts=1" in messages
+
+
+def test_delivery_reports_failure_after_tenth_stable_opposite_trace():
+    sent = []
+    messages = []
+    samples = iter([False] * 2 + [False] * 3 * 10)
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
@@ -117,66 +172,17 @@ def test_delivery_waits_for_initial_unknown_power_state_to_settle():
     with patch("services.tv_controller.time.sleep"):
         controller._deliver(True)
 
-    assert sent == ["turnOn"]
-    assert "[TV] command=ON initial=settled probes=3" in messages
-
-
-def test_delivery_retries_up_to_ten_times_for_on_after_opposite_power_state():
-    sent = []
-    messages = []
-    samples = iter([False] * 10 + [True])
-    controller = TvPowerDelivery(
-        lambda command: sent.append(command) or True,
-        lambda: next(samples),
-        log=messages.append,
-    )
-    with patch("services.tv_controller.time.sleep") as sleep:
-        controller._deliver(True)
-
-    assert sent == ["turnOn"] * 10
-    assert messages[-1] == "[TV] command=ON verification=confirmed attempts=10"
-
-
-def test_delivery_waits_through_transition_before_retrying():
-    sent = []
-    messages = []
-    samples = iter([False, None, None, False, True])
-    controller = TvPowerDelivery(
-        lambda command: sent.append(command) or True,
-        lambda: next(samples),
-        log=messages.append,
-    )
-
-    with patch("services.tv_controller.time.sleep"):
-        controller._deliver(True)
-
-    assert sent == ["turnOn", "turnOn"]
-    assert "[TV] command=ON verify=settled probes=3" in messages
-
-
-def test_delivery_reports_failure_after_tenth_two_second_check_is_opposite():
-    sent = []
-    messages = []
-    samples = iter([False] * 11)
-    controller = TvPowerDelivery(
-        lambda command: sent.append(command) or True,
-        lambda: next(samples),
-        log=messages.append,
-    )
-
-    with patch("services.tv_controller.time.sleep"):
-        controller._deliver(True)
-
     assert sent == ["turnOn"] * 10
     assert messages[-1] == "[TV] command=ON verification=failed attempts=10"
 
 
-def test_delivery_retries_off_up_to_ten_attempts():
+def test_delivery_retries_off_up_to_ten_stable_opposite_traces():
     sent = []
-    samples = iter([True] * 11)
+    samples = iter([True] * 2 + [True] * 3 * 10)
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
+        settle_reads=3,
     )
 
     with patch("services.tv_controller.time.sleep"):
