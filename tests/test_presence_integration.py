@@ -74,4 +74,6 @@ def test_presence_reaches_real_display_power_decisions():
     p.update_pir(650, True)
     assert step(650, 0).dim.disp_state == 'OFF'
     p.update_pir(650.7, True)
-    assert step(650.7, 0).hdmi_cmd == 'ON'
+    assert step(650.7, 0).dim.disp_state == 'OFF'
+    p.confirm_motion(650.8, {'ok': True, 'doorway_motion': True})
+    assert step(650.8, 0).hdmi_cmd == 'ON'

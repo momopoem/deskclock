@@ -13,9 +13,20 @@ def test_short_pir_pulse_does_not_extend_presence():
     assert p.last_motion == 0
     p.update_pir(20, True)
     p.update_pir(20.7, True)
-    assert p.last_motion == 20.7
+    assert p.last_motion == 0
+    assert not p.confirm_motion(20.8, {'ok': True, 'doorway_motion': False})
+    assert p.last_motion == 0
+    assert p.confirm_motion(20.9, {'ok': True, 'doorway_motion': True})
+    assert p.last_motion == 20.9
     p.update_pir(40, True)
-    assert p.last_motion == 40
+    assert p.last_motion == 20.9
+
+
+def test_camera_failure_or_blocked_doorway_never_extends_presence():
+    p = PresenceController(100)
+    assert not p.confirm_motion(200, {'ok': False, 'error': 'camera_open_failed'})
+    assert not p.confirm_motion(200, {'ok': True, 'doorway_motion': False})
+    assert p.last_motion == 100
 
 
 def test_motion_without_faces_expires_after_five_minutes():
@@ -80,7 +91,9 @@ def test_camera_worker_is_nonblocking_and_does_not_queue_duplicates():
         future = worker.future
         release.set()
         future.result(timeout=1)
-        assert worker.poll()['found_face']
+        result = worker.poll()
+        assert result['found_face']
+        assert result['_purpose'] == 'idle'
         assert worker.poll() is None
     finally:
         release.set()
@@ -121,6 +134,7 @@ def test_camera_exception_becomes_diagnostic_result():
             worker.future.result(timeout=1)
         except RuntimeError:
             pass
-        assert worker.poll() == {'ok': False, 'error': 'RuntimeError'}
+        result = worker.poll()
+        assert result == {'ok': False, 'error': 'RuntimeError', '_purpose': 'idle'}
     finally:
         worker.close()

@@ -42,15 +42,27 @@ class PresenceController:
             self.high_since = now
         if now - self.high_since >= self.settings.pir_confirm_sec:
             if not self.accepted:
-                self.log('motion=accepted')
-                self.misses = 0
+                self.log('motion=candidate')
                 newly_accepted = True
             else:
                 newly_accepted = False
             self.accepted = True
-            self.last_motion = now
             return newly_accepted
         return False
+
+    def confirm_motion(self, now, result):
+        """Accept a PIR candidate only when the doorway camera confirms it."""
+        doorway = result.get('doorway_detail', result)
+        if not doorway.get('ok'):
+            self.log(f"motion=rejected reason=camera_error error={doorway.get('error', 'invalid_result')}")
+            return False
+        if doorway.get('motion', result.get('doorway_motion')) is not True:
+            self.log('motion=rejected reason=doorway_not_confirmed')
+            return False
+        self.last_motion = now
+        self.misses = 0
+        self.log('motion=accepted source=pir+doorway')
+        return True
 
     def touch(self, now):
         self.last_motion = now
@@ -97,28 +109,37 @@ class CameraCheckWorker:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='presence-camera')
         self.future = None
         self.recheck_requested = False
+        self.purpose = "idle"
+        self.recheck_purpose = "idle"
 
-    def request(self, *, requeue: bool = False):
+    def request(self, *, requeue: bool = False, purpose: str = "idle"):
         if self.future is not None:
             # A new PIR session must receive its own recognition result.  Keep
             # one follow-up request rather than silently discarding it.
             self.recheck_requested = self.recheck_requested or requeue
+            if requeue:
+                self.recheck_purpose = purpose
             return False
         self.future = self.executor.submit(self.recognize)
+        self.purpose = purpose
         return True
 
     def poll(self):
         if self.future is None or not self.future.done():
             return None
         future, self.future = self.future, None
+        purpose = self.purpose
         try:
             result = future.result()
             result = result if isinstance(result, dict) else {'ok': False, 'error': 'invalid_result'}
         except Exception as exc:
             result = {'ok': False, 'error': type(exc).__name__}
+        result["_purpose"] = purpose
         if self.recheck_requested:
             self.recheck_requested = False
-            self.request()
+            next_purpose = self.recheck_purpose
+            self.recheck_purpose = "idle"
+            self.request(purpose=next_purpose)
         return result
 
     def close(self):
