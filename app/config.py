@@ -26,11 +26,11 @@ APP_VERSION = __version__
 UI_SCALE = 1.2
 I2C_LOCK = threading.Lock()
 
-# The installed TCL monitor runs at this native mode.  Do not derive the
-# rendering surface from a transient Wayland logical size after HDMI wake.
-DISPLAY_NATIVE_WIDTH = _env_int("DESKCLOCK_DISPLAY_NATIVE_WIDTH", 1920)
-DISPLAY_NATIVE_HEIGHT = _env_int("DESKCLOCK_DISPLAY_NATIVE_HEIGHT", 1200)
-DISPLAY_LAYOUT_RECOVERY_SEC = 3.0
+# The installed TCL monitor's active physical mode is 1920x1080.  Do not
+# derive the rendering surface from a transient Wayland logical size after an
+# HDMI wake, and do not request a taller surface which the compositor scales.
+DISPLAY_NATIVE_WIDTH = 1920
+DISPLAY_NATIVE_HEIGHT = 1080
 
 AHT21_ENABLE = True
 AHT21_I2C_BUS = 1
