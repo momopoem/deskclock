@@ -17,15 +17,15 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.4.7**
+- バージョン: **v2.4.8**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
-詳細資料はv2.4.7仕様です。
+詳細資料はv2.4.8仕様です。
 
-- `documents/DeskSideClock_基本設計書_v2.4.7.docx`
-- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.7.docx`
+- `documents/DeskSideClock_基本設計書_v2.4.8.docx`
+- `documents/DeskSideClock_ソフトウェア仕様書_v2.4.8.docx`
 
 物理センサーの個別・一括診断と自動テストはソースに同梱しています。手順は[センサー診断ガイド](app/test/README.md)を参照してください。
 
@@ -38,7 +38,8 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 - PIR人感センサーと照度センサーによる自動減光・画面消灯・復帰
 - 顔認識とSwitchBot Cloud APIを組み合わせた照明制御
 - 人感検知中の`turnOn`再送とBH1750による実点灯確認・不達再試行
-- 人感・照明の在席セッションに合わせたモニタ連動。SwitchBotプラグミニの消費電力で状態を確認し、赤外線トグルの誤作動を防止
+- 人感・照明の在席セッションに合わせたモニタ連動。SwitchBotプラグミニの電力遷移を追跡し、安定した状態だけを根拠に赤外線トグルを再送
+- HDMI復帰時のWayland論理解像度変動と独立した1920×1200固定レイアウトにより、時刻表示の縮小を防止
 - NTP同期状態の監視
 - 状態選択の永続化
 
@@ -102,7 +103,7 @@ face/                        顔登録・学習・単発認識（個人データ
 tests/                       pytestによる自動・回帰テスト
   fixtures/                   顔誤検出の回帰画像
 tools/                       検証補助（顔候補画像の検証など）
-documents/                   v2.4.3の基本設計書・ソフトウェア仕様書
+documents/                   現行版の基本設計書・ソフトウェア仕様書
   assets/                     設計書に使用する実機画面・操作領域図
 fonts/                       同梱フォントとライセンス
 run-clock.sh                 systemdから呼び出す起動スクリプト
