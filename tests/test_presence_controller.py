@@ -78,7 +78,8 @@ def test_camera_only_checked_when_visible_and_idle():
 
 def test_camera_worker_is_nonblocking_and_does_not_queue_duplicates():
     entered, release = threading.Event(), threading.Event()
-    def recognize():
+    def recognize(purpose):
+        assert purpose == 'idle'
         entered.set()
         release.wait(2)
         return {'ok': True, 'found_face': True}
@@ -103,7 +104,8 @@ def test_camera_worker_is_nonblocking_and_does_not_queue_duplicates():
 def test_requeued_camera_check_runs_after_current_check_finishes():
     calls = []
     entered, release = threading.Event(), threading.Event()
-    def recognize():
+    def recognize(purpose):
+        assert purpose in {'idle', 'pir_motion'}
         calls.append(1)
         entered.set()
         release.wait(2)
@@ -124,8 +126,24 @@ def test_requeued_camera_check_runs_after_current_check_finishes():
         worker.close()
 
 
+def test_camera_worker_passes_doorway_purpose_to_checker():
+    purposes = []
+    def recognize(purpose):
+        purposes.append(purpose)
+        return {'ok': True, 'motion': True}
+    worker = CameraCheckWorker(recognize)
+    try:
+        assert worker.request(purpose='pir_motion')
+        worker.future.result(timeout=1)
+        assert worker.poll()['_purpose'] == 'pir_motion'
+        assert purposes == ['pir_motion']
+    finally:
+        worker.close()
+
+
 def test_camera_exception_becomes_diagnostic_result():
-    def fail():
+    def fail(purpose):
+        assert purpose == 'idle'
         raise RuntimeError('camera unavailable')
     worker = CameraCheckWorker(fail)
     try:

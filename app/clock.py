@@ -607,15 +607,16 @@ def run_doorway_motion_once() -> dict:
         return {"ok": False, "error": f"doorway_{type(e).__name__}"}
 
 
-def run_presence_camera_check() -> dict:
-    """Use the camera serially: doorway motion first, then face recognition."""
-    doorway = run_doorway_motion_once()
-    face = run_face_recognize_once()
-    face["doorway_motion"] = doorway.get("motion") is True
-    face["doorway_detail"] = doorway
-    if not doorway.get("ok"):
-        face["doorway_error"] = doorway.get("error", "invalid_result")
-    return face
+def run_presence_camera_check(purpose: str = "idle") -> dict:
+    """Run only the camera work needed for the request.
+
+    A PIR candidate must not wait for face recognition. Doorway motion is the
+    wake gate; face recognition remains an independent periodic check used to
+    extend an already visible session.
+    """
+    if purpose == "pir_motion":
+        return run_doorway_motion_once()
+    return run_face_recognize_once()
 
 def fetch_internet_loop(shared, stop_event):
     """Fetch Open-Meteo temperature/humidity and optionally weather_code.
@@ -857,13 +858,13 @@ def main():
         session = None
         camera_result = camera_check.poll()
         if camera_result is not None:
-            if presence.record_camera(now_mono, camera_result):
-                display_light.authorized_face(now_mono)
-                _log_dpm_event("[PRESENCE] authorized_user=true timer=600")
             if camera_result.get("_purpose") == "pir_motion":
                 if presence.confirm_motion(now_mono, camera_result):
                     session = display_light.motion(now_mono)
                     _log_dpm_event("[PRESENCE] session=motion source=pir+doorway timer=300")
+            elif presence.record_camera(now_mono, camera_result):
+                display_light.authorized_face(now_mono)
+                _log_dpm_event("[PRESENCE] authorized_user=true timer=600")
         if presence.check_due(now_mono, "ON" if display_light.state != "OFF" else "OFF"):
             if camera_check.request():
                 presence.next_check = now_mono + DISPLAY_FACE_CHECK_INTERVAL_SEC

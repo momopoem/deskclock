@@ -120,7 +120,7 @@ class CameraCheckWorker:
             if requeue:
                 self.recheck_purpose = purpose
             return False
-        self.future = self.executor.submit(self.recognize)
+        self.future = self.executor.submit(self.recognize, purpose)
         self.purpose = purpose
         return True
 
