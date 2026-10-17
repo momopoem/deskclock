@@ -693,6 +693,10 @@ def main():
     sw, sh = screen.get_size()
     print(f"[UI] display={sw}x{sh} configured={display_size[0]}x{display_size[1]} ui_scale={UI_SCALE}")
 
+    # ``screen`` may be a transient Wayland logical surface after HDMI wake.
+    # It is used only as the blit target.  UI fonts and coordinates always use
+    # the known-good physical layout, so a 1080-logical-pixel wake cannot make
+    # the time smaller.
     renderer = ClockRenderer(screen=screen, sw=sw, sh=sh)
 
     # 起動時バージョン表示（3秒）
@@ -703,7 +707,7 @@ def main():
     pygame.display.flip()
 
     # Render/layout and service wiring are built through dedicated bootstrap helpers.
-    ui = build_ui_dependencies(sw=sw, sh=sh)
+    ui = build_ui_dependencies(sw=DISPLAY_LAYOUT_WIDTH, sh=DISPLAY_LAYOUT_HEIGHT)
     w, h = ui.w, ui.h
     canvas = ui.canvas
     font_main_size = ui.font_main_size

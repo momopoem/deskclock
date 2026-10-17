@@ -807,20 +807,22 @@ class ClockRenderer:
         time_rect_canvas = t_res.time_rect_canvas
 
         if abs(UI_SCALE - 1.0) < 1e-6:
-            ox_now, oy_now, scale_now = 0, 0, 1.0
+            zw, zh = canvas.get_size()
+            ox_now, oy_now = (sw - zw) // 2, (sh - zh) // 2
         else:
             zw = max(1, int(sw * UI_SCALE))
             zh = max(1, int(sh * UI_SCALE))
             ox_now = (sw - zw) // 2
             oy_now = (sh - zh) // 2
-            scale_now = UI_SCALE
+        scale_x = zw / max(1, canvas.get_width())
+        scale_y = zh / max(1, canvas.get_height())
 
         def _canvas_rect_to_screen(r):
             return pygame.Rect(
-                int(ox_now + r.left * scale_now),
-                int(oy_now + r.top * scale_now),
-                int(r.width * scale_now),
-                int(r.height * scale_now),
+                int(ox_now + r.left * scale_x),
+                int(oy_now + r.top * scale_y),
+                int(r.width * scale_x),
+                int(r.height * scale_y),
             )
 
         touch_rects_screen["indoor"] = _canvas_rect_to_screen(indoor_rect_canvas)

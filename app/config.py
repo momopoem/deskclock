@@ -26,11 +26,13 @@ APP_VERSION = __version__
 UI_SCALE = 1.2
 I2C_LOCK = threading.Lock()
 
-# The installed TCL monitor's active physical mode is 1920x1080.  Do not
-# derive the rendering surface from a transient Wayland logical size after an
-# HDMI wake, and do not request a taller surface which the compositor scales.
+# The TCL's physical output is 1920x1200.  Wayland can transiently hand SDL a
+# 1920x1080 *logical* surface after HDMI wake; that value must never determine
+# font sizes or the Desk Side Clock layout.
 DISPLAY_NATIVE_WIDTH = 1920
-DISPLAY_NATIVE_HEIGHT = 1080
+DISPLAY_NATIVE_HEIGHT = 1200
+DISPLAY_LAYOUT_WIDTH = 1920
+DISPLAY_LAYOUT_HEIGHT = 1200
 
 AHT21_ENABLE = True
 AHT21_I2C_BUS = 1
