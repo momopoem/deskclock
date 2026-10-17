@@ -16,11 +16,14 @@ class DisplayLightController:
     The room light is commanded only when a display session wakes or finishes.
     """
     def __init__(self, now: float, *, motion_sec: float = 300.0,
-                 authorized_face_sec: float = 600.0, fade_sec: float = 30.0):
+                 authorized_face_sec: float = 600.0, fade_sec: float = 30.0,
+                 initial_state: str = "ON"):
         self.motion_sec = float(motion_sec)
         self.authorized_face_sec = float(authorized_face_sec)
         self.fade_sec = float(fade_sec)
-        self.state = "ON"
+        if initial_state not in {"ON", "OFF"}:
+            raise ValueError("initial_state must be ON or OFF")
+        self.state = initial_state
         self.deadline = float(now) + self.motion_sec
         self.fade_started = None
         self.light_on = False

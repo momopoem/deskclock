@@ -788,6 +788,10 @@ def main():
     display_light = DisplayLightController(
         time.monotonic(), motion_sec=DISPLAY_MOTION_HOLD_SEC,
         authorized_face_sec=DISPLAY_FACE_HOLD_SEC, fade_sec=DISPLAY_FADE_SEC,
+        # After a service restart we do not know the physical HDMI state.
+        # Treat it as off so the next confirmed doorway event explicitly sends
+        # HDMI ON instead of silently assuming the black screen is already on.
+        initial_state="OFF",
     )
     light_delivery = LightOnDelivery(
         repeat_sec=LIGHT_ON_REPEAT_SEC, max_attempts=LIGHT_ON_MAX_ATTEMPTS,
