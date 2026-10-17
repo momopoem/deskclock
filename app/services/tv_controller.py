@@ -173,11 +173,15 @@ class TvPowerDelivery:
         read_state: TvStateReader,
         *,
         detect_delay_sec: float = 2.0,
+        on_max_attempts: int = 4,
+        off_max_attempts: int = 2,
         log: Callable[[str], None] | None = None,
     ):
         self.send_command = send_command
         self.read_state = read_state
         self.detect_delay_sec = float(detect_delay_sec)
+        self.on_max_attempts = max(1, int(on_max_attempts))
+        self.off_max_attempts = max(1, int(off_max_attempts))
         self.log = log or logging.getLogger(__name__).info
         self._requests: queue.Queue[tuple[bool, int] | None] = queue.Queue()
         self._thread: threading.Thread | None = None
@@ -240,32 +244,31 @@ class TvPowerDelivery:
             self.log(f"[TV] command={target} attempt={attempt} api_ok={accepted}")
             return bool(accepted)
 
-        def verify_after_delay(attempts: int) -> bool | None:
+        def verify_after_delay(attempts: int) -> tuple[bool, bool | None]:
             if self.detect_delay_sec > 0:
                 time.sleep(self.detect_delay_sec)
             if generation is not None and self._superseded(generation):
                 self.log(f"[TV] command={target} verification=cancelled reason=superseded")
-                return None
+                return False, None
             observed = self.read_state()
             if observed is target_on:
                 self.log(f"[TV] command={target} verification=confirmed attempts={attempts}")
-                return True
-            return observed
+                return True, observed
+            return False, observed
 
-        if not deliver_attempt(1):
-            return
-        first_check = verify_after_delay(1)
-        if first_check is True or first_check is None:
-            if first_check is None:
-                self.log(f"[TV] command={target} verification=unknown attempts=1")
-            return
-
-        # The first two readings were both clearly the opposite state, so one
-        # immediate retry is safe.  There are never more than two IR toggles.
-        if not deliver_attempt(2):
-            return
-        final_check = verify_after_delay(2)
-        if final_check is True:
-            return
-        outcome = "unknown" if final_check is None else "failed"
-        self.log(f"[TV] command={target} verification={outcome} attempts=2")
+        max_attempts = self.on_max_attempts if target_on else self.off_max_attempts
+        for attempt in range(1, max_attempts + 1):
+            if not deliver_attempt(attempt):
+                return
+            confirmed, observed = verify_after_delay(attempt)
+            if confirmed:
+                return
+            if observed is None:
+                self.log(f"[TV] command={target} verification=unknown attempts={attempt}")
+                return
+            # A known opposite state is the only condition under which a
+            # toggle can be sent again.  ON permits four attempts; OFF stays
+            # capped at two to avoid repeated power-down toggles.
+            if attempt < max_attempts:
+                continue
+            self.log(f"[TV] command={target} verification=failed attempts={attempt}")

@@ -19,7 +19,7 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 __product__ = "Desk Side Clock"
-__version__ = "v2.4.6"
+__version__ = "v2.4.7"
 __status__ = "release"
 APP_VERSION = __version__
 
@@ -196,8 +196,10 @@ TV_KEY_PATH = os.path.expanduser(
 )
 TV_PLUG_DEVICE_ID = os.environ.get("SWITCHBOT_tvPlugDeviceId", "")
 TV_POWER_ON_WATT = _env_float("DESKCLOCK_TV_POWER_ON_WATT", 20.0)
-TV_POWER_OFF_WATT = _env_float("DESKCLOCK_TV_POWER_OFF_WATT", 5.0)
+TV_POWER_OFF_WATT = _env_float("DESKCLOCK_TV_POWER_OFF_WATT", 6.0)
 TV_DETECT_DELAY_SEC = 2.0
+TV_ON_MAX_ATTEMPTS = 4
+TV_OFF_MAX_ATTEMPTS = 2
 LIGHT_PROBE_SEC = 8.0
 AUTHORIZED_USER_LIGHT_GRACE_SEC = 1800.0
 LIGHT_OFF_TIMEOUT_SEC = 300.0

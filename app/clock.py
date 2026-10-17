@@ -17,7 +17,7 @@ Desk Side Clock
 
 Product Name : Desk Side Clock
 Release Type : Product Version
-Version      : v2.4.6
+Version      : v2.4.7
 Status       : Release
 
 Notes:
@@ -761,6 +761,8 @@ def main():
                 lambda command: switchbot_tv_command(sb_token, sb_secret, sb_tv_id, command),
                 panel_state_reader,
                 detect_delay_sec=TV_DETECT_DELAY_SEC,
+                on_max_attempts=TV_ON_MAX_ATTEMPTS,
+                off_max_attempts=TV_OFF_MAX_ATTEMPTS,
                 log=_log_light_event,
             )
             _log_light_event(

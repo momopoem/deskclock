@@ -39,6 +39,12 @@ def test_power_state_reader_uses_hysteresis_and_reports_middle_as_unknown():
     assert messages == ["[TV] plug_power_w=12.0 panel_state=unknown"]
 
 
+def test_power_state_reader_accepts_six_watts_as_off_when_configured():
+    reader = TvPowerStateReader(lambda: 6.0, on_watt=20.0, off_watt=6.0)
+
+    assert reader() is False
+
+
 def test_power_state_reader_rejects_invalid_thresholds():
     with pytest.raises(ValueError):
         TvPowerStateReader(lambda: 1.0, on_watt=5.0, off_watt=5.0)
@@ -112,10 +118,10 @@ def test_delivery_skips_when_initial_power_state_is_unknown():
     assert messages == ["[TV] command=ON skipped reason=state_unknown"]
 
 
-def test_delivery_retries_once_after_two_second_opposite_power_state():
+def test_delivery_retries_up_to_four_times_for_on_after_opposite_power_state():
     sent = []
     messages = []
-    samples = iter([False, False, True])
+    samples = iter([False, False, False, False, True])
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
@@ -124,9 +130,9 @@ def test_delivery_retries_once_after_two_second_opposite_power_state():
     with patch("services.tv_controller.time.sleep") as sleep:
         controller._deliver(True)
 
-    assert sent == ["turnOn", "turnOn"]
-    assert sleep.call_args_list == [call(2.0), call(2.0)]
-    assert messages[-1] == "[TV] command=ON verification=confirmed attempts=2"
+    assert sent == ["turnOn", "turnOn", "turnOn", "turnOn"]
+    assert sleep.call_args_list == [call(2.0), call(2.0), call(2.0), call(2.0)]
+    assert messages[-1] == "[TV] command=ON verification=confirmed attempts=4"
 
 
 def test_delivery_does_not_retry_when_first_two_second_read_is_unknown():
@@ -146,10 +152,10 @@ def test_delivery_does_not_retry_when_first_two_second_read_is_unknown():
     assert messages[-1] == "[TV] command=ON verification=unknown attempts=1"
 
 
-def test_delivery_reports_failure_after_second_two_second_check_is_opposite():
+def test_delivery_reports_failure_after_fourth_two_second_check_is_opposite():
     sent = []
     messages = []
-    samples = iter([False, False, False])
+    samples = iter([False, False, False, False, False])
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
@@ -159,8 +165,22 @@ def test_delivery_reports_failure_after_second_two_second_check_is_opposite():
     with patch("services.tv_controller.time.sleep"):
         controller._deliver(True)
 
-    assert sent == ["turnOn", "turnOn"]
-    assert messages[-1] == "[TV] command=ON verification=failed attempts=2"
+    assert sent == ["turnOn", "turnOn", "turnOn", "turnOn"]
+    assert messages[-1] == "[TV] command=ON verification=failed attempts=4"
+
+
+def test_delivery_keeps_off_at_two_attempts():
+    sent = []
+    samples = iter([True, True, True])
+    controller = TvPowerDelivery(
+        lambda command: sent.append(command) or True,
+        lambda: next(samples),
+    )
+
+    with patch("services.tv_controller.time.sleep"):
+        controller._deliver(False)
+
+    assert sent == ["turnOff", "turnOff"]
 
 
 def test_superseded_delivery_never_sends_an_old_signal():
