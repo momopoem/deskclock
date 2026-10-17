@@ -99,29 +99,32 @@ def test_delivery_confirms_two_seconds_after_first_signal():
         controller._deliver(True)
 
     assert sent == ["turnOn"]
-    sleep.assert_called_once_with(2.0)
+    assert sleep.call_args_list == [call(2.0), call(2.0)]
     assert messages[-1] == "[TV] command=ON verification=confirmed attempts=1"
 
 
-def test_delivery_skips_when_initial_power_state_is_unknown():
+def test_delivery_waits_for_initial_unknown_power_state_to_settle():
     sent = []
     messages = []
+    samples = iter([None, None, False, True])
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
-        lambda: None,
+        lambda: next(samples),
+        settle_reads=3,
         log=messages.append,
     )
 
-    controller._deliver(True)
+    with patch("services.tv_controller.time.sleep"):
+        controller._deliver(True)
 
-    assert sent == []
-    assert messages == ["[TV] command=ON skipped reason=state_unknown"]
+    assert sent == ["turnOn"]
+    assert "[TV] command=ON initial=settled probes=3" in messages
 
 
-def test_delivery_retries_up_to_four_times_for_on_after_opposite_power_state():
+def test_delivery_retries_up_to_ten_times_for_on_after_opposite_power_state():
     sent = []
     messages = []
-    samples = iter([False, False, False, False, True])
+    samples = iter([False] * 10 + [True])
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
@@ -130,15 +133,14 @@ def test_delivery_retries_up_to_four_times_for_on_after_opposite_power_state():
     with patch("services.tv_controller.time.sleep") as sleep:
         controller._deliver(True)
 
-    assert sent == ["turnOn", "turnOn", "turnOn", "turnOn"]
-    assert sleep.call_args_list == [call(2.0), call(2.0), call(2.0), call(2.0)]
-    assert messages[-1] == "[TV] command=ON verification=confirmed attempts=4"
+    assert sent == ["turnOn"] * 10
+    assert messages[-1] == "[TV] command=ON verification=confirmed attempts=10"
 
 
-def test_delivery_does_not_retry_when_first_two_second_read_is_unknown():
+def test_delivery_waits_through_transition_before_retrying():
     sent = []
     messages = []
-    samples = iter([False, None])
+    samples = iter([False, None, None, False, True])
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
@@ -148,14 +150,14 @@ def test_delivery_does_not_retry_when_first_two_second_read_is_unknown():
     with patch("services.tv_controller.time.sleep"):
         controller._deliver(True)
 
-    assert sent == ["turnOn"]
-    assert messages[-1] == "[TV] command=ON verification=unknown attempts=1"
+    assert sent == ["turnOn", "turnOn"]
+    assert "[TV] command=ON verify=settled probes=3" in messages
 
 
-def test_delivery_reports_failure_after_fourth_two_second_check_is_opposite():
+def test_delivery_reports_failure_after_tenth_two_second_check_is_opposite():
     sent = []
     messages = []
-    samples = iter([False, False, False, False, False])
+    samples = iter([False] * 11)
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
@@ -165,13 +167,13 @@ def test_delivery_reports_failure_after_fourth_two_second_check_is_opposite():
     with patch("services.tv_controller.time.sleep"):
         controller._deliver(True)
 
-    assert sent == ["turnOn", "turnOn", "turnOn", "turnOn"]
-    assert messages[-1] == "[TV] command=ON verification=failed attempts=4"
+    assert sent == ["turnOn"] * 10
+    assert messages[-1] == "[TV] command=ON verification=failed attempts=10"
 
 
-def test_delivery_keeps_off_at_two_attempts():
+def test_delivery_retries_off_up_to_ten_attempts():
     sent = []
-    samples = iter([True, True, True])
+    samples = iter([True] * 11)
     controller = TvPowerDelivery(
         lambda command: sent.append(command) or True,
         lambda: next(samples),
@@ -180,7 +182,7 @@ def test_delivery_keeps_off_at_two_attempts():
     with patch("services.tv_controller.time.sleep"):
         controller._deliver(False)
 
-    assert sent == ["turnOff", "turnOff"]
+    assert sent == ["turnOff"] * 10
 
 
 def test_superseded_delivery_never_sends_an_old_signal():

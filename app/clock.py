@@ -814,6 +814,7 @@ def main():
                 detect_delay_sec=TV_DETECT_DELAY_SEC,
                 on_max_attempts=TV_ON_MAX_ATTEMPTS,
                 off_max_attempts=TV_OFF_MAX_ATTEMPTS,
+                settle_reads=TV_POWER_SETTLE_READS,
                 log=_log_light_event,
             )
             _log_light_event(

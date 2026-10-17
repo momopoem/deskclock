@@ -163,8 +163,8 @@ class AndroidTvRemoteStateReader:
 class TvPowerDelivery:
     """Serialize toggle-IR delivery and verify it from Plug Mini power draw.
 
-    A clear Plug Mini state is required before each toggle.  This keeps an
-    unavailable or in-between power reading from accidentally reversing the TV.
+    Intermediate Plug Mini readings are re-sampled before another toggle is
+    sent. This avoids reversing a transition which has already started.
     """
 
     def __init__(
@@ -173,8 +173,9 @@ class TvPowerDelivery:
         read_state: TvStateReader,
         *,
         detect_delay_sec: float = 2.0,
-        on_max_attempts: int = 4,
-        off_max_attempts: int = 2,
+        on_max_attempts: int = 10,
+        off_max_attempts: int = 10,
+        settle_reads: int = 5,
         log: Callable[[str], None] | None = None,
     ):
         self.send_command = send_command
@@ -182,6 +183,7 @@ class TvPowerDelivery:
         self.detect_delay_sec = float(detect_delay_sec)
         self.on_max_attempts = max(1, int(on_max_attempts))
         self.off_max_attempts = max(1, int(off_max_attempts))
+        self.settle_reads = max(1, int(settle_reads))
         self.log = log or logging.getLogger(__name__).info
         self._requests: queue.Queue[tuple[bool, int] | None] = queue.Queue()
         self._thread: threading.Thread | None = None
@@ -228,10 +230,7 @@ class TvPowerDelivery:
         if generation is not None and self._superseded(generation):
             self.log(f"[TV] command={target} cancelled reason=superseded")
             return
-        current = self.read_state()
-        if current is None:
-            self.log(f"[TV] command={target} skipped reason=state_unknown")
-            return
+        current = self._wait_for_known_state(target, generation, phase="initial")
         if current is target_on:
             self.log(f"[TV] command={target} skipped reason=already_{target.lower()}")
             return
@@ -250,7 +249,7 @@ class TvPowerDelivery:
             if generation is not None and self._superseded(generation):
                 self.log(f"[TV] command={target} verification=cancelled reason=superseded")
                 return False, None
-            observed = self.read_state()
+            observed = self._wait_for_known_state(target, generation, phase="verify", already_delayed=True)
             if observed is target_on:
                 self.log(f"[TV] command={target} verification=confirmed attempts={attempts}")
                 return True, observed
@@ -264,11 +263,34 @@ class TvPowerDelivery:
             if confirmed:
                 return
             if observed is None:
-                self.log(f"[TV] command={target} verification=unknown attempts={attempt}")
+                self.log(f"[TV] command={target} verification=unresolved attempts={attempt}")
                 return
-            # A known opposite state is the only condition under which a
-            # toggle can be sent again.  ON permits four attempts; OFF stays
-            # capped at two to avoid repeated power-down toggles.
+            # Send another toggle only after the Plug Mini has confirmed the
+            # opposite state. This is safe for the learned toggle command.
             if attempt < max_attempts:
                 continue
             self.log(f"[TV] command={target} verification=failed attempts={attempt}")
+
+    def _wait_for_known_state(
+        self,
+        target: str,
+        generation: int | None,
+        *,
+        phase: str,
+        already_delayed: bool = False,
+    ) -> bool | None:
+        """Return a stable Plug Mini state, allowing a bounded transition time."""
+        for probe in range(1, self.settle_reads + 1):
+            if generation is not None and self._superseded(generation):
+                self.log(f"[TV] command={target} {phase}=cancelled reason=superseded")
+                return None
+            if probe > 1 or not already_delayed:
+                if self.detect_delay_sec > 0:
+                    time.sleep(self.detect_delay_sec)
+            observed = self.read_state()
+            if observed is not None:
+                if probe > 1:
+                    self.log(f"[TV] command={target} {phase}=settled probes={probe}")
+                return observed
+        self.log(f"[TV] command={target} {phase}=unknown probes={self.settle_reads}")
+        return None

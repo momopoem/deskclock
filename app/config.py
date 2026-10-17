@@ -208,8 +208,11 @@ TV_PLUG_DEVICE_ID = os.environ.get("SWITCHBOT_tvPlugDeviceId", "")
 TV_POWER_ON_WATT = _env_float("DESKCLOCK_TV_POWER_ON_WATT", 20.0)
 TV_POWER_OFF_WATT = _env_float("DESKCLOCK_TV_POWER_OFF_WATT", 6.0)
 TV_DETECT_DELAY_SEC = 2.0
-TV_ON_MAX_ATTEMPTS = 4
-TV_OFF_MAX_ATTEMPTS = 2
+TV_ON_MAX_ATTEMPTS = 10
+TV_OFF_MAX_ATTEMPTS = 10
+# A TV often reports a middle consumption value for a few seconds while its
+# panel changes state. Re-read instead of sending a second toggle immediately.
+TV_POWER_SETTLE_READS = 5
 LIGHT_PROBE_SEC = 8.0
 AUTHORIZED_USER_LIGHT_GRACE_SEC = 1800.0
 LIGHT_OFF_TIMEOUT_SEC = 300.0
