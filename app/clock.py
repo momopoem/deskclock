@@ -847,6 +847,10 @@ def main():
         motion_detected = presence.update_pir(
             now_mono, bool(state.pir_value) and not state.pir_err
             and now_mono - state.pir_mono < 2.0)
+        # A camera completion can produce an ON command asynchronously. Keep
+        # that decision for this frame; calling step() afterwards would erase
+        # its display/light commands before they reach the delivery section.
+        session = None
         camera_result = camera_check.poll()
         if camera_result is not None:
             if presence.record_camera(now_mono, camera_result):
@@ -868,7 +872,7 @@ def main():
                 # Kept as an explicit rollback switch, never as the default.
                 session = display_light.motion(now_mono)
                 _log_dpm_event("[PRESENCE] session=motion source=pir timer=300")
-        else:
+        if session is None:
             session = display_light.step(now_mono)
 
         # Discard gestures while HDMI is off, including a press begun before

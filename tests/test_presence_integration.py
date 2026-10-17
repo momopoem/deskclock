@@ -77,3 +77,11 @@ def test_presence_reaches_real_display_power_decisions():
     assert step(650.7, 0).dim.disp_state == 'OFF'
     p.confirm_motion(650.8, {'ok': True, 'doorway_motion': True})
     assert step(650.8, 0).hdmi_cmd == 'ON'
+
+
+def test_async_doorway_on_decision_is_not_replaced_by_normal_step():
+    source = (Path(__file__).parents[1] / 'app/clock.py').read_text(encoding='utf-8')
+    pending = source.index('session = None\n        camera_result = camera_check.poll()')
+    doorway_on = source.index('session = display_light.motion(now_mono)', pending)
+    normal_step = source.index('if session is None:\n            session = display_light.step(now_mono)', doorway_on)
+    assert pending < doorway_on < normal_step
