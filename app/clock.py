@@ -835,8 +835,13 @@ def main():
                     f"actual={actual_display_size[0]}x{actual_display_size[1]} "
                     f"expected={display_size[0]}x{display_size[1]}"
                 )
-            elif now_mono - layout_mismatch_since >= DISPLAY_LAYOUT_RECOVERY_SEC:
-                print("[UI] layout_recovery=reexec reason=surface_size_mismatch")
+            elif (now_mono - layout_mismatch_since >= DISPLAY_LAYOUT_RECOVERY_SEC
+                  and os.environ.get("DESKCLOCK_LAYOUT_RECOVERY_ATTEMPTED") != "1"):
+                # Preserve one recovery attempt after HDMI/Wayland has settled,
+                # but never turn a persistent compositor mode mismatch into an
+                # endless splash/re-exec loop.
+                print("[UI] layout_recovery=reexec_once reason=surface_size_mismatch", flush=True)
+                os.environ["DESKCLOCK_LAYOUT_RECOVERY_ATTEMPTED"] = "1"
                 pygame.quit()
                 os.execv(sys.executable, [sys.executable, *sys.argv])
         motion_detected = presence.update_pir(
