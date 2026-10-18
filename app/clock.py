@@ -534,6 +534,8 @@ def switchbot_tv_command(token: str, secret: str, tv_device_id: str, command: st
 FACE_RECOG_PY = sys.executable
 FACE_RECOG_SCRIPT = os.path.expanduser("~/deskclock/face/recognize_once.py")
 FACE_RECOG_TIMEOUT_SEC = 12
+DOORWAY_MOTION_SCRIPT = os.path.expanduser("~/deskclock/face/doorway_motion.py")
+DOORWAY_MOTION_TIMEOUT_SEC = 4
 
 def run_face_recognize_once() -> dict:
     """Run recognize_once.py and parse JSON output.
@@ -572,8 +574,44 @@ def run_face_recognize_once() -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def run_doorway_motion_once() -> dict:
+    """Sample only the calibrated doorway ROI; do not save camera frames."""
+    import subprocess, json
+
+    if not os.path.exists(DOORWAY_MOTION_SCRIPT):
+        return {"ok": False, "error": "doorway_script_missing"}
+    try:
+        p = subprocess.run(
+            [FACE_RECOG_PY, DOORWAY_MOTION_SCRIPT], capture_output=True, text=True,
+            timeout=DOORWAY_MOTION_TIMEOUT_SEC, check=False,
+            env={
+                **os.environ,
+                "DESKCLOCK_DOORWAY_ROI": ",".join(str(v) for v in DISPLAY_DOORWAY_ROI),
+                "DESKCLOCK_DOORWAY_FRAMES": str(DISPLAY_DOORWAY_FRAMES),
+                "DESKCLOCK_DOORWAY_FRAME_INTERVAL_SEC": str(DISPLAY_DOORWAY_FRAME_INTERVAL_SEC),
+                "DESKCLOCK_DOORWAY_MIN_CHANGED_RATIO": str(DISPLAY_DOORWAY_MIN_CHANGED_RATIO),
+                "DESKCLOCK_DOORWAY_MAX_CHANGED_RATIO": str(DISPLAY_DOORWAY_MAX_CHANGED_RATIO),
+                "DESKCLOCK_DOORWAY_MIN_ACTIVE_BANDS": str(DISPLAY_DOORWAY_MIN_ACTIVE_BANDS),
+            },
+        )
+        for line in reversed((p.stdout or "").splitlines()):
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, dict):
+                return data
+        return {"ok": False, "error": "doorway_bad_json"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "doorway_timeout"}
+    except Exception as e:
+        return {"ok": False, "error": f"doorway_{type(e).__name__}"}
+
+
 def run_presence_camera_check(purpose: str = "idle") -> dict:
-    """Recognise Hiroshi without making camera output a PIR presence gate."""
+    """Keep wake confirmation separate from in-session face recognition."""
+    if purpose == "wake_motion":
+        return {"doorway_detail": run_doorway_motion_once()}
     return run_face_recognize_once()
 
 def fetch_internet_loop(shared, stop_event):
@@ -799,19 +837,30 @@ def main():
         session = None
         camera_result = camera_check.poll()
         if camera_result is not None:
-            if presence.record_camera(now_mono, camera_result):
+            if camera_result.get("_purpose") == "wake_motion":
+                if presence.confirm_wake_motion(now_mono, camera_result):
+                    session = display_light.motion(now_mono)
+                    _log_dpm_event("[PRESENCE] session=wake source=pir+doorway timer=300")
+            elif presence.record_camera(now_mono, camera_result):
                 display_light.authorized_face(now_mono)
                 _log_dpm_event("[PRESENCE] authorized_user=true timer=600")
         if presence.check_due(now_mono, "ON" if display_light.state != "OFF" else "OFF"):
             if camera_check.request():
                 presence.next_check = now_mono + DISPLAY_FACE_CHECK_INTERVAL_SEC
         if motion_detected:
-            # PIR immediately refreshes the five-minute session. Recognition
-            # runs in parallel and may extend it to ten minutes, but a missed
-            # face must never retract accepted PIR presence.
-            session = display_light.motion(now_mono)
-            _log_dpm_event("[PRESENCE] session=motion source=pir timer=300")
-            camera_check.request(requeue=True, purpose="pir_recognition")
+            if display_light.state == "OFF":
+                # OFF-state policy: PIR is a candidate only.  No display,
+                # light, or TV command is issued until doorway motion confirms.
+                camera_check.request(requeue=True, purpose="wake_motion")
+                _log_dpm_event("[PRESENCE] wake=candidate source=pir camera=doorway")
+            else:
+                # ON/FADING policy: PIR maintains the existing session for
+                # five minutes.  Recognition is advisory and can only extend
+                # it to ten minutes for the authorised user.
+                presence.accept_active_pir(now_mono)
+                session = display_light.motion(now_mono)
+                _log_dpm_event("[PRESENCE] session=active source=pir timer=300")
+                camera_check.request(requeue=True, purpose="pir_recognition")
         if session is None:
             session = display_light.step(now_mono)
 

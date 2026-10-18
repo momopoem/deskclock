@@ -156,9 +156,18 @@ DISPLAY_FACE_CHECK_IDLE_SEC = 30.0
 DISPLAY_FACE_CHECK_INTERVAL_SEC = 60.0
 DISPLAY_FACE_MISSES_REQUIRED = 3
 DISPLAY_CAMERA_FAILURE_GRACE_SEC = 120.0
-# PIR is the immediate five-minute presence signal. The camera only
-# recognises Hiroshi to extend that already-active session to ten minutes;
-# it must never veto an ON-screen PIR refresh.
+# Wake-up is deliberately a different policy from keeping an already-visible
+# session alive.  A PIR edge while OFF is only a candidate: camera motion in
+# the calibrated doorway area must confirm it before anything is turned on.
+DISPLAY_DOORWAY_ROI = (4 / 8, 1 / 6, 5 / 8, 5 / 6)  # E2 through E5
+DISPLAY_DOORWAY_FRAMES = 4
+DISPLAY_DOORWAY_FRAME_INTERVAL_SEC = 0.15
+DISPLAY_DOORWAY_MIN_CHANGED_RATIO = 0.015
+DISPLAY_DOORWAY_MAX_CHANGED_RATIO = 0.45
+DISPLAY_DOORWAY_MIN_ACTIVE_BANDS = 2
+# Once a session is already visible, PIR is the immediate five-minute
+# presence signal. The camera recognises Hiroshi to extend that active
+# session to ten minutes; it does not veto that active-session refresh.
 DEBUG_SR501 = True
 SR501_DOT_RADIUS = 6
 SR501_DOT_MARGIN = 10

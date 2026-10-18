@@ -74,13 +74,18 @@ def test_presence_reaches_real_display_power_decisions():
     p.update_pir(650, True)
     assert step(650, 0).dim.disp_state == 'OFF'
     p.update_pir(650.7, True)
-    assert step(650.7, 0).hdmi_cmd == 'ON'
+    assert step(650.7, 0).dim.disp_state == 'OFF'
+    assert p.confirm_wake_motion(650.8, {'doorway_detail': {'ok': True, 'motion': True}})
+    assert step(650.8, 0).hdmi_cmd == 'ON'
 
 
-def test_pir_session_is_created_before_camera_recognition_is_queued():
+def test_off_state_wake_is_camera_gated_but_active_pir_is_not():
     source = (Path(__file__).parents[1] / 'app/clock.py').read_text(encoding='utf-8')
     pending = source.index('session = None\n        camera_result = camera_check.poll()')
-    pir_session = source.index('session = display_light.motion(now_mono)', pending)
-    recognition = source.index('purpose="pir_recognition"', pir_session)
-    normal_step = source.index('if session is None:\n            session = display_light.step(now_mono)', recognition)
-    assert pending < pir_session < recognition < normal_step
+    wake_confirm = source.index('presence.confirm_wake_motion(now_mono, camera_result)', pending)
+    wake_session = source.index('session = display_light.motion(now_mono)', wake_confirm)
+    off_gate = source.index('if display_light.state == "OFF":', wake_session)
+    wake_request = source.index('purpose="wake_motion"', off_gate)
+    active_pir = source.index('presence.accept_active_pir(now_mono)', wake_request)
+    active_session = source.index('session = display_light.motion(now_mono)', active_pir)
+    assert pending < wake_confirm < wake_session < off_gate < wake_request < active_pir < active_session

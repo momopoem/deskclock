@@ -47,11 +47,28 @@ class PresenceController:
             else:
                 newly_accepted = False
             self.accepted = True
-            if newly_accepted:
-                self.last_motion = now
-                self.misses = 0
             return newly_accepted
         return False
+
+    def accept_active_pir(self, now):
+        """Refresh an already-visible session; never used to wake an OFF one."""
+        self.last_motion = now
+        self.misses = 0
+        self.log('active_pir=accepted timer=300')
+
+    def confirm_wake_motion(self, now, result):
+        """Accept an OFF-state wake candidate only after doorway motion."""
+        doorway = result.get('doorway_detail', result)
+        if not doorway.get('ok'):
+            self.log(f"wake=rejected reason=camera_error error={doorway.get('error', 'invalid_result')}")
+            return False
+        if doorway.get('motion') is not True:
+            self.log('wake=rejected reason=doorway_not_confirmed')
+            return False
+        self.last_motion = now
+        self.misses = 0
+        self.log('wake=accepted source=pir+doorway timer=300')
+        return True
 
     def touch(self, now):
         self.last_motion = now

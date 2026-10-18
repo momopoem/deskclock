@@ -13,18 +13,39 @@ def test_short_pir_pulse_does_not_extend_presence():
     assert p.last_motion == 0
     p.update_pir(20, True)
     p.update_pir(20.7, True)
+    # Raw PIR only becomes a timer refresh after the caller selects the
+    # already-active-session policy.
+    assert p.last_motion == 0
+    p.accept_active_pir(20.7)
     assert p.last_motion == 20.7
     p.update_pir(40, True)
     assert p.last_motion == 20.7
 
 
-def test_camera_failure_or_no_face_does_not_retract_pir_presence():
+def test_camera_failure_or_no_face_does_not_retract_an_active_pir_session():
     p = PresenceController(100)
     p.update_pir(200, True)
     assert p.update_pir(200.7, True)
+    p.accept_active_pir(200.7)
     p.record_camera(201, {'ok': False, 'error': 'camera_open_failed'})
     p.record_camera(202, {'ok': True, 'found_face': False})
     assert p.last_motion == 200.7
+
+
+def test_pir_candidate_does_not_wake_until_doorway_motion_confirms():
+    p = PresenceController(0)
+    p.update_pir(10, True)
+    assert p.update_pir(10.7, True)
+    assert not p.confirm_wake_motion(11, {'doorway_detail': {'ok': True, 'motion': False}})
+    assert p.last_motion == 0
+    assert p.confirm_wake_motion(12, {'doorway_detail': {'ok': True, 'motion': True}})
+    assert p.last_motion == 12
+
+
+def test_camera_error_rejects_off_state_wake_candidate():
+    p = PresenceController(0)
+    assert not p.confirm_wake_motion(10, {'doorway_detail': {'ok': False, 'error': 'camera_open_failed'}})
+    assert p.last_motion == 0
 
 
 def test_motion_without_faces_expires_after_five_minutes():
