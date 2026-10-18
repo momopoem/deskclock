@@ -789,10 +789,14 @@ def main():
     display_light = DisplayLightController(
         time.monotonic(), motion_sec=DISPLAY_MOTION_HOLD_SEC,
         authorized_face_sec=DISPLAY_FACE_HOLD_SEC, fade_sec=DISPLAY_FADE_SEC,
-        # Startup has no evidence of occupancy.  Treat it as OFF so a noisy
-        # PIR cannot bypass the doorway-camera wake policy after a restart.
-        initial_state="OFF",
+        # The clock must always be readable after a service start.  This is a
+        # display-only state: it does not imply presence or command a light/TV.
+        initial_state="ON",
     )
+    # Keep the external-device wake policy independent from screen rendering.
+    # It remains armed at startup and after an OFF transition until doorway
+    # motion confirms a real return.
+    wake_confirmation_required = True
     light_delivery = LightOnDelivery(
         repeat_sec=LIGHT_ON_REPEAT_SEC, max_attempts=LIGHT_ON_MAX_ATTEMPTS,
     )
@@ -838,6 +842,7 @@ def main():
         if camera_result is not None:
             if camera_result.get("_purpose") == "wake_motion":
                 if presence.confirm_wake_motion(now_mono, camera_result):
+                    wake_confirmation_required = False
                     session = display_light.motion(now_mono)
                     _log_dpm_event("[PRESENCE] session=wake source=pir+doorway timer=300")
             elif presence.record_camera(now_mono, camera_result):
@@ -847,9 +852,9 @@ def main():
             if camera_check.request():
                 presence.next_check = now_mono + DISPLAY_FACE_CHECK_INTERVAL_SEC
         if motion_detected:
-            if display_light.state == "OFF":
-                # OFF-state policy: PIR is a candidate only.  No display,
-                # light, or TV command is issued until doorway motion confirms.
+            if wake_confirmation_required or display_light.state == "OFF":
+                # The startup/OFF policy: PIR is a candidate only. No light
+                # or TV command is issued until doorway motion confirms.
                 camera_check.request(requeue=True, purpose="wake_motion")
                 _log_dpm_event("[PRESENCE] wake=candidate source=pir camera=doorway")
             else:
@@ -862,6 +867,8 @@ def main():
                 camera_check.request(requeue=True, purpose="pir_recognition")
         if session is None:
             session = display_light.step(now_mono)
+        if session.display_state == "OFF":
+            wake_confirmation_required = True
 
         # Discard gestures while HDMI is off, including a press begun before
         # power-off. A release after waking must not complete that old gesture.

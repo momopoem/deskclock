@@ -84,14 +84,18 @@ def test_off_state_wake_is_camera_gated_but_active_pir_is_not():
     pending = source.index('session = None\n        camera_result = camera_check.poll()')
     wake_confirm = source.index('presence.confirm_wake_motion(now_mono, camera_result)', pending)
     wake_session = source.index('session = display_light.motion(now_mono)', wake_confirm)
-    off_gate = source.index('if display_light.state == "OFF":', wake_session)
+    off_gate = source.index('if wake_confirmation_required or display_light.state == "OFF":', wake_session)
     wake_request = source.index('purpose="wake_motion"', off_gate)
     active_pir = source.index('presence.accept_active_pir(now_mono)', wake_request)
     active_session = source.index('session = display_light.motion(now_mono)', active_pir)
     assert pending < wake_confirm < wake_session < off_gate < wake_request < active_pir < active_session
 
 
-def test_clock_starts_in_off_state_so_startup_cannot_bypass_wake_camera_gate():
+def test_clock_starts_bright_but_keeps_external_wake_camera_gated():
     source = (Path(__file__).parents[1] / 'app/clock.py').read_text(encoding='utf-8')
     controller = source.index('display_light = DisplayLightController(')
-    assert 'initial_state="OFF"' in source[controller:controller + 700]
+    assert 'initial_state="ON"' in source[controller:controller + 700]
+    gate = source.index('wake_confirmation_required = True', controller)
+    wake_request = source.index('purpose="wake_motion"', gate)
+    active_pir = source.index('presence.accept_active_pir(now_mono)', wake_request)
+    assert controller < gate < wake_request < active_pir
