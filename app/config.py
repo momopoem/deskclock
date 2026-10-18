@@ -162,9 +162,13 @@ DISPLAY_CAMERA_FAILURE_GRACE_SEC = 120.0
 DISPLAY_DOORWAY_ROI = (4 / 8, 1 / 6, 5 / 8, 5 / 6)  # E2 through E5
 DISPLAY_DOORWAY_FRAMES = 4
 DISPLAY_DOORWAY_FRAME_INTERVAL_SEC = 0.15
-DISPLAY_DOORWAY_MIN_CHANGED_RATIO = 0.015
+# First sensitivity adjustment: retain the calibrated doorway area and the
+# two-band guard, but accept lower-contrast/slow entries in two of three pairs.
+DISPLAY_DOORWAY_PIXEL_THRESHOLD = 20
+DISPLAY_DOORWAY_MIN_CHANGED_RATIO = 0.008
 DISPLAY_DOORWAY_MAX_CHANGED_RATIO = 0.45
 DISPLAY_DOORWAY_MIN_ACTIVE_BANDS = 2
+DISPLAY_DOORWAY_MIN_QUALIFIED_PAIRS = 2
 # Once a session is already visible, PIR is the immediate five-minute
 # presence signal. The camera recognises Hiroshi to extend that active
 # session to ten minutes; it does not veto that active-session refresh.

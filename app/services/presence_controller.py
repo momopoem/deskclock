@@ -59,15 +59,20 @@ class PresenceController:
     def confirm_wake_motion(self, now, result):
         """Accept an OFF-state wake candidate only after doorway motion."""
         doorway = result.get('doorway_detail', result)
+        diagnostic = (
+            f" qualified_pairs={doorway.get('qualified_pairs', '?')}"
+            f" required_pairs={doorway.get('min_qualified_pairs', '?')}"
+            f" pairs={doorway.get('pairs', [])}"
+        )
         if not doorway.get('ok'):
             self.log(f"wake=rejected reason=camera_error error={doorway.get('error', 'invalid_result')}")
             return False
         if doorway.get('motion') is not True:
-            self.log('wake=rejected reason=doorway_not_confirmed')
+            self.log(f'wake=rejected reason=doorway_not_confirmed{diagnostic}')
             return False
         self.last_motion = now
         self.misses = 0
-        self.log('wake=accepted source=pir+doorway timer=300')
+        self.log(f'wake=accepted source=pir+doorway timer=300{diagnostic}')
         return True
 
     def touch(self, now):

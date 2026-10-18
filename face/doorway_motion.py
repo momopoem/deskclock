@@ -2,8 +2,8 @@
 
 The script examines only the user-calibrated E2:E5 region. It does not save
 frames or perform recognition. A candidate must change in at least two of
-three vertical bands in every consecutive frame pair; all-frame exposure
-changes are rejected rather than treated as a person entering the room.
+three vertical bands in two of the three consecutive frame pairs; all-frame
+exposure changes are rejected rather than treated as a person entering.
 """
 from __future__ import annotations
 
@@ -31,15 +31,25 @@ def changed_bands(mask, cv2):
                for i in range(3))
 
 
+def is_motion(pairs, *, min_ratio, max_ratio, min_bands, min_qualified_pairs):
+    """Return the accepted pairs and whether enough evidence supports a wake."""
+    qualified = [p for p in pairs if (
+        min_ratio <= p["ratio"] <= max_ratio and p["bands"] >= min_bands
+    )]
+    return len(qualified) >= min_qualified_pairs, qualified
+
+
 def main():
     import cv2
 
     x0, y0, x1, y1 = _floats("DESKCLOCK_DOORWAY_ROI", (0.5, 1 / 6, 5 / 8, 5 / 6))
     frames = _int("DESKCLOCK_DOORWAY_FRAMES", 4)
     interval = _float("DESKCLOCK_DOORWAY_FRAME_INTERVAL_SEC", 0.15)
+    pixel_threshold = _int("DESKCLOCK_DOORWAY_PIXEL_THRESHOLD", 20)
     min_ratio = _float("DESKCLOCK_DOORWAY_MIN_CHANGED_RATIO", 0.015)
     max_ratio = _float("DESKCLOCK_DOORWAY_MAX_CHANGED_RATIO", 0.45)
     min_bands = _int("DESKCLOCK_DOORWAY_MIN_ACTIVE_BANDS", 2)
+    min_qualified_pairs = _int("DESKCLOCK_DOORWAY_MIN_QUALIFIED_PAIRS", 2)
     capture = cv2.VideoCapture(0)
     try:
         if not capture.isOpened():
@@ -57,16 +67,23 @@ def main():
             roi = frame[top:bottom, left:right]
             current = cv2.GaussianBlur(cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY), (5, 5), 0)
             if previous is not None:
-                _, mask = cv2.threshold(cv2.absdiff(previous, current), 25, 255, cv2.THRESH_BINARY)
+                _, mask = cv2.threshold(cv2.absdiff(previous, current), pixel_threshold, 255, cv2.THRESH_BINARY)
                 mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
                 ratio = cv2.countNonZero(mask) / mask.size
                 pairs.append({"ratio": round(ratio, 4), "bands": changed_bands(mask, cv2)})
             previous = current
             if index + 1 < frames:
                 time.sleep(interval)
-        qualified = [p for p in pairs if min_ratio <= p["ratio"] <= max_ratio and p["bands"] >= min_bands]
-        return {"ok": True, "motion": len(qualified) == len(pairs), "pairs": pairs,
-                "roi": [left, top, right, bottom]}
+        motion, qualified = is_motion(
+            pairs, min_ratio=min_ratio, max_ratio=max_ratio,
+            min_bands=min_bands, min_qualified_pairs=min_qualified_pairs,
+        )
+        return {
+            "ok": True, "motion": motion, "pairs": pairs,
+            "qualified_pairs": len(qualified), "min_qualified_pairs": min_qualified_pairs,
+            "pixel_threshold": pixel_threshold, "min_ratio": min_ratio,
+            "min_bands": min_bands, "roi": [left, top, right, bottom],
+        }
     finally:
         capture.release()
 
