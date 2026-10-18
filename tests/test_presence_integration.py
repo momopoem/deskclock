@@ -89,3 +89,9 @@ def test_off_state_wake_is_camera_gated_but_active_pir_is_not():
     active_pir = source.index('presence.accept_active_pir(now_mono)', wake_request)
     active_session = source.index('session = display_light.motion(now_mono)', active_pir)
     assert pending < wake_confirm < wake_session < off_gate < wake_request < active_pir < active_session
+
+
+def test_clock_starts_in_off_state_so_startup_cannot_bypass_wake_camera_gate():
+    source = (Path(__file__).parents[1] / 'app/clock.py').read_text(encoding='utf-8')
+    controller = source.index('display_light = DisplayLightController(')
+    assert 'initial_state="OFF"' in source[controller:controller + 700]

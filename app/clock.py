@@ -789,10 +789,9 @@ def main():
     display_light = DisplayLightController(
         time.monotonic(), motion_sec=DISPLAY_MOTION_HOLD_SEC,
         authorized_face_sec=DISPLAY_FACE_HOLD_SEC, fade_sec=DISPLAY_FADE_SEC,
-        # A service restart must never leave the rendered clock black while
-        # camera/PIR confirmation is pending.  Start visibly and let the
-        # normal presence timeout handle a later fade/OFF decision.
-        initial_state="ON",
+        # Startup has no evidence of occupancy.  Treat it as OFF so a noisy
+        # PIR cannot bypass the doorway-camera wake policy after a restart.
+        initial_state="OFF",
     )
     light_delivery = LightOnDelivery(
         repeat_sec=LIGHT_ON_REPEAT_SEC, max_attempts=LIGHT_ON_MAX_ATTEMPTS,
