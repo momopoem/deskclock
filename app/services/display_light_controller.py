@@ -27,6 +27,7 @@ class DisplayLightController:
         self.deadline = float(now) + self.motion_sec
         self.fade_started = None
         self.light_on = False
+        self.light_off_pending = False
 
     def motion(self, now: float) -> DisplayLightDecision:
         was_off = self.state == "OFF"
@@ -34,9 +35,17 @@ class DisplayLightController:
         self.deadline = float(now) + self.motion_sec
         self.fade_started = None
         display_command = "ON" if was_off else None
-        light_command = "ON" if not self.light_on else None
+        # An unverified OFF must be cancelled by an explicit ON, because the
+        # physical light may already have turned off while BH1750 was sampled.
+        light_command = "ON" if (not self.light_on or self.light_off_pending) else None
         self.light_on = True
+        self.light_off_pending = False
         return DisplayLightDecision("ON", 1.0, display_command, light_command)
+
+    def confirm_light_off(self) -> None:
+        """Record OFF only after the delivery layer observed a lux decrease."""
+        self.light_on = False
+        self.light_off_pending = False
 
     def authorized_face(self, now: float) -> None:
         if self.state != "OFF":
@@ -58,7 +67,7 @@ class DisplayLightController:
             if progress >= 1.0:
                 self.state = "OFF"
                 light_command = "OFF" if self.light_on else None
-                self.light_on = False
+                self.light_off_pending = bool(light_command)
                 return DisplayLightDecision("OFF", 0.0, "OFF", light_command)
             return DisplayLightDecision("FADING", max(0.0, 1.0 - progress))
         return DisplayLightDecision("ON", 1.0)
@@ -109,4 +118,44 @@ class LightOnDelivery:
             self.next_action = float(now) + self.repeat_sec
             return "ON"
         self.cancel()
+        return None
+
+
+class LightOffDelivery:
+    """Deliver and verify OFF without declaring the physical light off early."""
+    def __init__(self, *, repeat_sec: float = 3.0, max_attempts: int = 3):
+        self.repeat_sec = float(repeat_sec)
+        self.max_attempts = int(max_attempts)
+        self.active = False
+        self.failed = False
+        self.confirmed = False
+        self.attempts = 0
+        self.next_action = 0.0
+        self.baseline_lux = None
+
+    def start(self, now: float, baseline_lux: float | None) -> str:
+        self.active = True
+        self.failed = False
+        self.confirmed = False
+        self.attempts = 1
+        self.baseline_lux = baseline_lux
+        self.next_action = float(now) + self.repeat_sec
+        return "OFF"
+
+    def cancel(self) -> None:
+        self.active = False
+
+    def step(self, now: float, *, confirmed: bool) -> str | None:
+        if not self.active or float(now) < self.next_action:
+            return None
+        if confirmed:
+            self.confirmed = True
+            self.cancel()
+            return None
+        if self.attempts < self.max_attempts:
+            self.attempts += 1
+            self.next_action = float(now) + self.repeat_sec
+            return "OFF"
+        self.active = False
+        self.failed = True
         return None

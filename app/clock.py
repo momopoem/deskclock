@@ -86,7 +86,7 @@ from utils.common import (
 )
 from services.ntp_monitor import ntp_monitor_update
 from services.presence_controller import PresenceController, PresenceSettings, CameraCheckWorker
-from services.display_light_controller import DisplayLightController, LightOnDelivery
+from services.display_light_controller import DisplayLightController, LightOnDelivery, LightOffDelivery
 from services.tv_controller import SwitchBotPlugPowerReader, TvPowerDelivery, TvPowerStateReader
 from sensors import (
     _bh1750_read_lux,
@@ -109,6 +109,7 @@ from services.weather_service import (
 from services.brightness_controller import _apply_brightness
 from services.light_controller import (
     light_is_confirmed,
+    light_is_off_confirmed,
     lux_sample_is_fresh,
     switchbot_command_payload,
     switchbot_command_succeeded,
@@ -469,6 +470,9 @@ LIGHT_ON_VERIFY_SEC = 3.0            # allow BH1750 to observe the result of eac
 LIGHT_ON_MAX_ATTEMPTS = 3            # initial + unconditional repeat + failed-verification retry
 LIGHT_ON_MIN_RISE_LX = 2.0           # relative rise can confirm light below the absolute threshold
 LIGHT_ON_MOTION_HOLD_SEC = 30.0       # finish verification after a short PIR pulse/API latency
+LIGHT_OFF_REPEAT_SEC = 3.0            # wait for a fresh BH1750 sample before retrying OFF
+LIGHT_OFF_MAX_ATTEMPTS = 3            # initial OFF plus two retries; retain ON state if unconfirmed
+LIGHT_OFF_MIN_DROP_LX = 2.0           # required physical lux decrease from the pre-OFF baseline
 
 # When motion happens in a dark state, briefly turn on the light to improve face recognition
 # and then decide whether to keep it on.
@@ -804,6 +808,9 @@ def main():
     light_delivery = LightOnDelivery(
         repeat_sec=LIGHT_ON_REPEAT_SEC, max_attempts=LIGHT_ON_MAX_ATTEMPTS,
     )
+    light_off_delivery = LightOffDelivery(
+        repeat_sec=LIGHT_OFF_REPEAT_SEC, max_attempts=LIGHT_OFF_MAX_ATTEMPTS,
+    )
     tv_delivery = None
     if TV_ENABLE:
         if sb_token and sb_secret and sb_tv_id and TV_PLUG_DEVICE_ID:
@@ -1052,7 +1059,9 @@ def main():
         elif session.display_command == "OFF":
             _run_cmd_silent(HDMI_OFF_CMD)
         light_on_command = None
+        light_off_command = None
         if session.light_command == "ON":
+            light_off_delivery.cancel()
             light_on_command = light_delivery.start(now_mono, state.lux)
             if tv_delivery is not None:
                 tv_delivery.request(True)
@@ -1074,6 +1083,30 @@ def main():
                     f"verification={'confirmed' if confirmed else 'failed'} "
                     f"lux={state.lux!r} baseline_lux={light_delivery.baseline_lux!r}"
                 )
+        if session.light_command == "OFF":
+            light_delivery.cancel()
+            light_off_command = light_off_delivery.start(now_mono, state.lux)
+        elif light_off_delivery.active:
+            lux_fresh = lux_sample_is_fresh(
+                now_mono=now_mono, lux_mono=state.lux_mono,
+                stale_sec=BH1750_STALE_SEC,
+            )
+            off_confirmed = lux_fresh and light_is_off_confirmed(
+                baseline_lux=light_off_delivery.baseline_lux,
+                current_lux=state.lux,
+                min_drop_lx=LIGHT_OFF_MIN_DROP_LX,
+            )
+            was_active = light_off_delivery.active
+            light_off_command = light_off_delivery.step(now_mono, confirmed=off_confirmed)
+            if was_active and not light_off_delivery.active:
+                if light_off_delivery.confirmed:
+                    session.confirm_light_off()
+                    state.light.is_on = False
+                _log_light_event(
+                    f"off_verification={'confirmed' if light_off_delivery.confirmed else 'failed'} "
+                    f"lux={state.lux!r} baseline_lux={light_off_delivery.baseline_lux!r} "
+                    f"attempts={light_off_delivery.attempts}"
+                )
         if light_on_command == "ON" and state.light.enabled:
             response = switchbot_light_on(sb_token, sb_secret, sb_light_id)
             state.light.is_on = switchbot_command_succeeded(response)
@@ -1081,10 +1114,12 @@ def main():
                 f"verification=turnOn attempts={light_delivery.attempts} "
                 f"api_ok={switchbot_command_succeeded(response)}"
             )
-        if session.light_command == "OFF" and state.light.enabled:
-            light_delivery.cancel()
+        if light_off_command == "OFF" and state.light.enabled:
             response = switchbot_light_off(sb_token, sb_secret, sb_light_id)
-            state.light.is_on = False if switchbot_command_succeeded(response) else state.light.is_on
+            _log_light_event(
+                f"off_verification=turnOff attempts={light_off_delivery.attempts} "
+                f"api_ok={switchbot_command_succeeded(response)}"
+            )
         if session.light_command == "OFF" and tv_delivery is not None:
             tv_delivery.request(False)
 

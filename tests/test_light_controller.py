@@ -11,6 +11,7 @@ sys.path.insert(0, str(APP_DIR))
 from services.light_controller import (
     arm_light_off,
     light_is_confirmed,
+    light_is_off_confirmed,
     light_off_due,
     lux_sample_is_fresh,
     switchbot_command_payload,
@@ -91,6 +92,14 @@ class LightControllerTests(unittest.TestCase):
             current_lux=2.9,
             light_on_lx=5.0,
             min_rise_lx=2.0,
+        ))
+
+    def test_light_off_confirmation_requires_measured_lux_drop(self) -> None:
+        self.assertTrue(light_is_off_confirmed(
+            baseline_lux=8.0, current_lux=5.9, min_drop_lx=2.0,
+        ))
+        self.assertFalse(light_is_off_confirmed(
+            baseline_lux=8.0, current_lux=6.1, min_drop_lx=2.0,
         ))
 
 
