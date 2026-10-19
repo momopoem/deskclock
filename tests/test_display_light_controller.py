@@ -59,41 +59,45 @@ def test_off_startup_wakes_with_explicit_display_and_light_on():
 
 
 def test_light_on_delivery_retries_then_confirms():
-    d = LightOnDelivery(repeat_sec=3, max_attempts=3)
+    d = LightOnDelivery(repeat_sec=2, max_attempts=10)
     assert d.start(0, 0) == "ON"
-    assert d.step(2.9, confirmed=False) is None
-    assert d.step(3, confirmed=False) == "ON"  # unconditional retransmission
-    assert d.step(6, confirmed=False) == "ON"  # failed verification retry
-    assert d.step(9, confirmed=True) is None
+    assert d.step(1.9, confirmed=False) is None
+    assert d.step(2, confirmed=False) == "ON"
+    assert d.step(4, confirmed=False) == "ON"
+    assert d.step(6, confirmed=True) is None
     assert not d.active
+    assert d.confirmed
 
 
-def test_light_on_delivery_stops_after_third_unconfirmed_attempt():
-    d = LightOnDelivery(repeat_sec=3, max_attempts=3)
+def test_light_on_delivery_stops_after_tenth_unconfirmed_attempt():
+    d = LightOnDelivery(repeat_sec=2, max_attempts=10)
     d.start(0, 0)
-    assert d.step(3, confirmed=False) == "ON"
-    assert d.step(6, confirmed=False) == "ON"
-    assert d.step(9, confirmed=False) is None
+    for now in range(2, 20, 2):
+        assert d.step(now, confirmed=False) == "ON"
+    assert d.attempts == 10
+    assert d.step(20, confirmed=False) is None
     assert not d.active
+    assert d.failed
 
 
 def test_light_off_delivery_retries_until_lux_drop_confirms():
-    d = LightOffDelivery(repeat_sec=3, max_attempts=3)
+    d = LightOffDelivery(repeat_sec=2, max_attempts=10)
     assert d.start(0, 10) == "OFF"
-    assert d.step(2.9, confirmed=False) is None
-    assert d.step(3, confirmed=False) == "OFF"
-    assert d.step(6, confirmed=False) == "OFF"
-    assert d.step(9, confirmed=True) is None
+    assert d.step(1.9, confirmed=False) is None
+    assert d.step(2, confirmed=False) == "OFF"
+    assert d.step(4, confirmed=False) == "OFF"
+    assert d.step(6, confirmed=True) is None
     assert not d.active
     assert not d.failed
+    assert d.confirmed
 
 
 def test_light_off_delivery_keeps_unknown_state_after_failed_retries():
-    d = LightOffDelivery(repeat_sec=3, max_attempts=3)
+    d = LightOffDelivery(repeat_sec=2, max_attempts=10)
     d.start(0, 10)
-    assert d.step(3, confirmed=False) == "OFF"
-    assert d.step(6, confirmed=False) == "OFF"
-    assert d.step(9, confirmed=False) is None
+    for now in range(2, 20, 2):
+        assert d.step(now, confirmed=False) == "OFF"
+    assert d.step(20, confirmed=False) is None
     assert not d.active
     assert d.failed
 

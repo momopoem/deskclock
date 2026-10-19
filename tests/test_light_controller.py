@@ -96,10 +96,13 @@ class LightControllerTests(unittest.TestCase):
 
     def test_light_off_confirmation_requires_measured_lux_drop(self) -> None:
         self.assertTrue(light_is_off_confirmed(
-            baseline_lux=8.0, current_lux=5.9, min_drop_lx=2.0,
+            baseline_lux=8.0, current_lux=0.3, light_off_lx=0.3, min_drop_lx=1.0,
+        ))
+        self.assertTrue(light_is_off_confirmed(
+            baseline_lux=8.0, current_lux=7.0, light_off_lx=0.3, min_drop_lx=1.0,
         ))
         self.assertFalse(light_is_off_confirmed(
-            baseline_lux=8.0, current_lux=6.1, min_drop_lx=2.0,
+            baseline_lux=8.0, current_lux=7.1, light_off_lx=0.3, min_drop_lx=1.0,
         ))
 
 

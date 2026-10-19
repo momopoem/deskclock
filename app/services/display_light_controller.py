@@ -74,50 +74,42 @@ class DisplayLightController:
 
 
 class LightOnDelivery:
-    """Restore the proven ON delivery sequence without owning light policy.
-
-    A display session starts this helper.  It sends an immediate command, an
-    unconditional retry after three seconds, then verifies BH1750 illumination
-    and performs at most one additional retry.
-    """
+    """Deliver ON and confirm it with BH1750 before reporting physical ON."""
     def __init__(self, *, repeat_sec: float = 3.0, max_attempts: int = 3):
         self.repeat_sec = float(repeat_sec)
         self.max_attempts = int(max_attempts)
         self.active = False
+        self.failed = False
+        self.confirmed = False
         self.attempts = 0
         self.next_action = 0.0
-        self.phase = ""
         self.baseline_lux = None
 
     def start(self, now: float, baseline_lux: float | None) -> str:
         self.active = True
+        self.failed = False
+        self.confirmed = False
         self.attempts = 1
         self.baseline_lux = baseline_lux
-        self.phase = "repeat"
         self.next_action = float(now) + self.repeat_sec
         return "ON"
 
     def cancel(self) -> None:
         self.active = False
-        self.phase = ""
 
     def step(self, now: float, *, confirmed: bool) -> str | None:
         if not self.active or float(now) < self.next_action:
             return None
-        if self.phase == "repeat":
-            self.attempts += 1
-            self.phase = "verify"
-            self.next_action = float(now) + self.repeat_sec
-            return "ON"
         if confirmed:
+            self.confirmed = True
             self.cancel()
             return None
         if self.attempts < self.max_attempts:
             self.attempts += 1
-            self.phase = "verify"
             self.next_action = float(now) + self.repeat_sec
             return "ON"
-        self.cancel()
+        self.active = False
+        self.failed = True
         return None
 
 

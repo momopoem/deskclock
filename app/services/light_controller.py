@@ -119,11 +119,16 @@ def light_is_off_confirmed(
     *,
     baseline_lux: float | None,
     current_lux: float | None,
+    light_off_lx: float,
     min_drop_lx: float,
 ) -> bool:
-    """Confirm a physical light-off transition from a BH1750 lux decrease."""
-    if baseline_lux is None or current_lux is None:
+    """Confirm physical OFF by absolute darkness or a drop from the baseline."""
+    if current_lux is None:
+        return False
+    current = max(0.0, float(current_lux))
+    if current <= float(light_off_lx):
+        return True
+    if baseline_lux is None:
         return False
     baseline = max(0.0, float(baseline_lux))
-    current = max(0.0, float(current_lux))
     return (baseline - current) >= float(min_drop_lx)

@@ -465,14 +465,15 @@ def is_night_time(now: datetime) -> bool:
 # =========================
 SWITCHBOT_LIGHT_TIMEOUT_SEC = 8
 SWITCHBOT_LIGHT_COOLDOWN_SEC = 3.0   # prevent rapid repeated commands
-LIGHT_ON_REPEAT_SEC = 3.0            # unconditional second turnOn while PIR remains active
-LIGHT_ON_VERIFY_SEC = 3.0            # allow BH1750 to observe the result of each transmission
-LIGHT_ON_MAX_ATTEMPTS = 3            # initial + unconditional repeat + failed-verification retry
-LIGHT_ON_MIN_RISE_LX = 2.0           # relative rise can confirm light below the absolute threshold
+LIGHT_ON_REPEAT_SEC = 2.0            # wait for a fresh BH1750 sample after each turnOn
+LIGHT_ON_MAX_ATTEMPTS = 10           # initial send plus up to nine retries
+LIGHT_ON_CONFIRM_LX = 1.5            # absolute BH1750 value confirming the light is ON
+LIGHT_ON_MIN_RISE_LX = 1.0           # relative rise from the pre-ON baseline
 LIGHT_ON_MOTION_HOLD_SEC = 30.0       # finish verification after a short PIR pulse/API latency
-LIGHT_OFF_REPEAT_SEC = 3.0            # wait for a fresh BH1750 sample before retrying OFF
-LIGHT_OFF_MAX_ATTEMPTS = 3            # initial OFF plus two retries; retain ON state if unconfirmed
-LIGHT_OFF_MIN_DROP_LX = 2.0           # required physical lux decrease from the pre-OFF baseline
+LIGHT_OFF_REPEAT_SEC = 2.0           # wait for a fresh BH1750 sample after each turnOff
+LIGHT_OFF_MAX_ATTEMPTS = 10           # initial send plus up to nine retries
+LIGHT_OFF_CONFIRM_LX = 0.3            # absolute BH1750 value confirming the light is OFF
+LIGHT_OFF_MIN_DROP_LX = 1.0           # relative drop from the pre-OFF baseline
 
 # When motion happens in a dark state, briefly turn on the light to improve face recognition
 # and then decide whether to keep it on.
@@ -1073,15 +1074,18 @@ def main():
             confirmed = lux_fresh and light_is_confirmed(
                 baseline_lux=light_delivery.baseline_lux,
                 current_lux=state.lux,
-                light_on_lx=BH1750_LIGHT_ON_LX,
+                light_on_lx=LIGHT_ON_CONFIRM_LX,
                 min_rise_lx=LIGHT_ON_MIN_RISE_LX,
             )
             was_active = light_delivery.active
             light_on_command = light_delivery.step(now_mono, confirmed=confirmed)
             if was_active and not light_delivery.active:
+                if light_delivery.confirmed:
+                    state.light.is_on = True
                 _log_light_event(
-                    f"verification={'confirmed' if confirmed else 'failed'} "
-                    f"lux={state.lux!r} baseline_lux={light_delivery.baseline_lux!r}"
+                    f"on_verification={'confirmed' if light_delivery.confirmed else 'failed'} "
+                    f"lux={state.lux!r} baseline_lux={light_delivery.baseline_lux!r} "
+                    f"attempts={light_delivery.attempts}"
                 )
         if session.light_command == "OFF":
             light_delivery.cancel()
@@ -1094,6 +1098,7 @@ def main():
             off_confirmed = lux_fresh and light_is_off_confirmed(
                 baseline_lux=light_off_delivery.baseline_lux,
                 current_lux=state.lux,
+                light_off_lx=LIGHT_OFF_CONFIRM_LX,
                 min_drop_lx=LIGHT_OFF_MIN_DROP_LX,
             )
             was_active = light_off_delivery.active
@@ -1109,9 +1114,8 @@ def main():
                 )
         if light_on_command == "ON" and state.light.enabled:
             response = switchbot_light_on(sb_token, sb_secret, sb_light_id)
-            state.light.is_on = switchbot_command_succeeded(response)
             _log_light_event(
-                f"verification=turnOn attempts={light_delivery.attempts} "
+                f"on_verification=turnOn attempts={light_delivery.attempts} "
                 f"api_ok={switchbot_command_succeeded(response)}"
             )
         if light_off_command == "OFF" and state.light.enabled:
