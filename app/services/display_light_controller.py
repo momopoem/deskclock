@@ -47,6 +47,17 @@ class DisplayLightController:
         self.light_on = False
         self.light_off_pending = False
 
+    def restore_light_on_from_measurement(self) -> None:
+        """Adopt a verified ON state after the process has restarted.
+
+        The service deliberately starts with a readable display without
+        commanding external devices.  A fresh BH1750 sample can nevertheless
+        prove that the room light was already on when the previous process was
+        stopped.  Retaining that fact ensures its eventual OFF transition is
+        delivered and verified instead of being silently skipped.
+        """
+        self.light_on = True
+
     def authorized_face(self, now: float) -> None:
         if self.state != "OFF":
             self.deadline = float(now) + self.authorized_face_sec

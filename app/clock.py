@@ -812,6 +812,10 @@ def main():
     light_off_delivery = LightOffDelivery(
         repeat_sec=LIGHT_OFF_REPEAT_SEC, max_attempts=LIGHT_OFF_MAX_ATTEMPTS,
     )
+    # Startup never sends an unsolicited command.  Once a fresh BH1750 sample
+    # arrives, preserve a physically verified ON state across a service restart
+    # so that the scheduled OFF sequence will still be issued and confirmed.
+    startup_light_state_reconciled = False
     tv_delivery = None
     if TV_ENABLE:
         if sb_token and sb_secret and sb_tv_id and TV_PLUG_DEVICE_ID:
@@ -846,6 +850,26 @@ def main():
     while running:
         color_changed = False
         now_mono = time.monotonic()
+        if not startup_light_state_reconciled:
+            lux_fresh = lux_sample_is_fresh(
+                now_mono=now_mono, lux_mono=state.lux_mono,
+                stale_sec=BH1750_STALE_SEC,
+            )
+            if lux_fresh:
+                startup_light_state_reconciled = True
+                light_was_on = light_is_confirmed(
+                    baseline_lux=None,
+                    current_lux=state.lux,
+                    light_on_lx=LIGHT_ON_CONFIRM_LX,
+                    min_rise_lx=LIGHT_ON_MIN_RISE_LX,
+                )
+                if light_was_on:
+                    display_light.restore_light_on_from_measurement()
+                    state.light.is_on = True
+                _log_light_event(
+                    f"startup_light_state={'ON' if light_was_on else 'OFF'} "
+                    f"lux={state.lux!r} threshold_lx={LIGHT_ON_CONFIRM_LX:.1f}"
+                )
         motion_detected = presence.update_pir(
             now_mono, bool(state.pir_value) and not state.pir_err
             and now_mono - state.pir_mono < 2.0)

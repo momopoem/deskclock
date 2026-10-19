@@ -51,6 +51,15 @@ def test_startup_does_not_send_an_unsolicited_light_off():
     assert c.step(330).light_command is None
 
 
+def test_startup_measured_on_state_is_carried_to_verified_off_delivery():
+    c = DisplayLightController(0)
+    c.restore_light_on_from_measurement()
+    d = c.step(330)
+    assert d.display_state == "OFF"
+    assert d.light_command == "OFF"
+    assert c.light_on
+
+
 def test_off_startup_wakes_with_explicit_display_and_light_on():
     c = DisplayLightController(0, initial_state="OFF")
     d = c.motion(10)
