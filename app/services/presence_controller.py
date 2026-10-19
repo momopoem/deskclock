@@ -63,6 +63,8 @@ class PresenceController:
             f" qualified_pairs={doorway.get('qualified_pairs', '?')}"
             f" required_pairs={doorway.get('min_qualified_pairs', '?')}"
             f" pairs={doorway.get('pairs', [])}"
+            f" accepted_regions={doorway.get('accepted_regions', [])}"
+            f" regions={doorway.get('regions', {})}"
         )
         if not doorway.get('ok'):
             self.log(f"wake=rejected reason=camera_error error={doorway.get('error', 'invalid_result')}")

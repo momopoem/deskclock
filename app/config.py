@@ -158,14 +158,22 @@ DISPLAY_FACE_MISSES_REQUIRED = 3
 DISPLAY_CAMERA_FAILURE_GRACE_SEC = 120.0
 # Wake-up is deliberately a different policy from keeping an already-visible
 # session alive.  A PIR edge while OFF is only a candidate: camera motion in
-# the calibrated doorway area must confirm it before anything is turned on.
+# the calibrated doorway area or its surrounding entry corridor must confirm
+# it before anything is turned on.
 DISPLAY_DOORWAY_ROI = (4 / 8, 1 / 6, 5 / 8, 5 / 6)  # E2 through E5
-DISPLAY_DOORWAY_FRAMES = 4
-DISPLAY_DOORWAY_FRAME_INTERVAL_SEC = 0.15
-# First sensitivity adjustment: retain the calibrated doorway area and the
-# two-band guard, but accept lower-contrast/slow entries in two of three pairs.
+# A wider, still entrance-only corridor catches a person who does not cross
+# the narrow E2:E5 strip during the first camera sample.  It is not used
+# outside an already-confirmed PIR candidate.
+DISPLAY_DOORWAY_CORRIDOR_ROI = (3 / 8, 1 / 8, 6 / 8, 7 / 8)
+# Sample for about 1.4 seconds after PIR confirmation, rather than only 0.45
+# seconds.  This catches slow entries without making camera-only decisions.
+DISPLAY_DOORWAY_FRAMES = 8
+DISPLAY_DOORWAY_FRAME_INTERVAL_SEC = 0.2
+# Keep the contrast and multi-band guards.  The larger corridor needs a lower
+# changed-area ratio because the same person occupies a smaller fraction of it.
 DISPLAY_DOORWAY_PIXEL_THRESHOLD = 20
 DISPLAY_DOORWAY_MIN_CHANGED_RATIO = 0.008
+DISPLAY_DOORWAY_CORRIDOR_MIN_CHANGED_RATIO = 0.003
 DISPLAY_DOORWAY_MAX_CHANGED_RATIO = 0.45
 DISPLAY_DOORWAY_MIN_ACTIVE_BANDS = 2
 DISPLAY_DOORWAY_MIN_QUALIFIED_PAIRS = 2

@@ -19,6 +19,13 @@ def test_doorway_env_region_is_parseable(monkeypatch):
     assert doorway_motion._floats('TEST_DOORWAY_ROI', ()) == (0.5, 0.1666667, 0.625, 0.8333333)
 
 
+def test_corridor_default_covers_the_doorway_strip():
+    doorway = (4 / 8, 1 / 6, 5 / 8, 5 / 6)
+    corridor = doorway_motion._floats('MISSING_CORRIDOR_ROI', (3 / 8, 1 / 8, 6 / 8, 7 / 8))
+    assert corridor[0] < doorway[0] < doorway[2] < corridor[2]
+    assert corridor[1] < doorway[1] < doorway[3] < corridor[3]
+
+
 def test_two_of_three_qualified_pairs_accepts_slow_entry():
     pairs = [
         {'ratio': 0.008, 'bands': 2},
@@ -43,3 +50,16 @@ def test_one_qualified_pair_still_rejects_noise():
     )
     assert not motion
     assert len(qualified) == 1
+
+
+def test_corridor_accepts_small_entry_motion_with_two_qualified_pairs():
+    pairs = [
+        {'ratio': 0.003, 'bands': 2},
+        {'ratio': 0.001, 'bands': 2},
+        {'ratio': 0.0035, 'bands': 2},
+    ]
+    motion, qualified = doorway_motion.is_motion(
+        pairs, min_ratio=0.003, max_ratio=0.45, min_bands=2, min_qualified_pairs=2,
+    )
+    assert motion
+    assert len(qualified) == 2
