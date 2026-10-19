@@ -17,12 +17,12 @@ Raspberry Pi 5とHDMIタッチディスプレイを使った、常時表示型�
 ## 現在のバージョン
 
 - 製品名: Desk Side Clock
-- バージョン: **v2.4.8**
+- バージョン: **v2.4.9**
 - ステータス: release
 - GitHubデフォルトブランチ: `main`
 - Copyright 2026 Hiroshi Ishikawa. Powered by momopoem inc.
 
-詳細資料はv2.4.8仕様です。
+詳細資料はv2.4.8仕様です。v2.4.9は消灯時の照明確認処理で発生していた例外を修正したホットフィックスです。
 
 - `documents/DeskSideClock_基本設計書_v2.4.8.docx`
 - `documents/DeskSideClock_ソフトウェア仕様書_v2.4.8.docx`

@@ -17,7 +17,7 @@ Desk Side Clock
 
 Product Name : Desk Side Clock
 Release Type : Product Version
-Version      : v2.4.8
+Version      : v2.4.9
 Status       : Release
 
 Notes:
@@ -1129,7 +1129,7 @@ def main():
             light_off_command = light_off_delivery.step(now_mono, confirmed=off_confirmed)
             if was_active and not light_off_delivery.active:
                 if light_off_delivery.confirmed:
-                    session.confirm_light_off()
+                    display_light.confirm_light_off()
                     state.light.is_on = False
                 _log_light_event(
                     f"off_verification={'confirmed' if light_off_delivery.confirmed else 'failed'} "
