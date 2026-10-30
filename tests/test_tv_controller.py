@@ -140,6 +140,28 @@ def test_delivery_retries_only_after_a_complete_opposite_trace():
     assert messages[-1] == "[TV] command=ON verification=confirmed attempts=2"
 
 
+def test_delivery_keeps_observing_a_slow_start_before_any_second_toggle():
+    sent = []
+    messages = []
+    # Two low samples establish the pre-command state.  The panel then stays
+    # in standby draw for 18 seconds before it begins its normal draw.
+    samples = iter([False, False] + [False] * 9 + [None, True, True])
+    controller = TvPowerDelivery(
+        lambda command: sent.append(command) or True,
+        lambda: next(samples),
+        settle_reads=3,
+        on_settle_reads=12,
+        log=messages.append,
+    )
+
+    with patch("services.tv_controller.time.sleep") as sleep:
+        controller._deliver(True)
+
+    assert sent == ["turnOn"]
+    assert sleep.call_args_list == [call(2.0)] * 14
+    assert messages[-1] == "[TV] command=ON verification=confirmed attempts=1"
+
+
 def test_delivery_observes_a_delayed_low_transition_without_a_second_toggle():
     sent = []
     messages = []

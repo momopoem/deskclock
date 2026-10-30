@@ -183,6 +183,7 @@ class TvPowerDelivery:
         on_max_attempts: int = 10,
         off_max_attempts: int = 10,
         settle_reads: int = 6,
+        on_settle_reads: int | None = None,
         confirm_reads: int = 2,
         log: Callable[[str], None] | None = None,
     ):
@@ -192,6 +193,13 @@ class TvPowerDelivery:
         self.on_max_attempts = max(1, int(on_max_attempts))
         self.off_max_attempts = max(1, int(off_max_attempts))
         self.settle_reads = max(2, int(settle_reads))
+        # The IR key is a toggle.  Starting the TCL panel can take much longer
+        # than entering standby, so an ON retry must wait through a dedicated
+        # full observation window before it is safe to send another keypress.
+        self.on_settle_reads = max(
+            self.settle_reads,
+            int(on_settle_reads) if on_settle_reads is not None else self.settle_reads,
+        )
         self.confirm_reads = max(2, int(confirm_reads))
         self.log = log or logging.getLogger(__name__).info
         self._requests: queue.Queue[tuple[bool, int] | None] = queue.Queue()
@@ -301,7 +309,8 @@ class TvPowerDelivery:
         are deliberately evaluated as a trace rather than an absolute state.
         """
         trace: list[bool | None] = []
-        for probe in range(1, self.settle_reads + 1):
+        settle_reads = self.on_settle_reads if target_on else self.settle_reads
+        for probe in range(1, settle_reads + 1):
             if generation is not None and self._superseded(generation):
                 self.log(f"[TV] command={target} {phase}=cancelled reason=superseded")
                 return "cancelled", trace

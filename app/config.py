@@ -229,6 +229,10 @@ TV_OFF_MAX_ATTEMPTS = 10
 # A TV often reports a middle consumption value for a few seconds while its
 # panel changes state.  These are trace bands, not single-reading decisions.
 TV_POWER_SETTLE_READS = 6
+# A power-on transition is materially slower than a power-off transition on
+# the TCL panel.  Keep observing for 40 seconds before another IR *toggle* is
+# permitted, so a late-rising panel cannot be turned straight back off.
+TV_POWER_ON_SETTLE_READS = 20
 TV_POWER_CONFIRM_READS = 2
 LIGHT_PROBE_SEC = 8.0
 AUTHORIZED_USER_LIGHT_GRACE_SEC = 1800.0
